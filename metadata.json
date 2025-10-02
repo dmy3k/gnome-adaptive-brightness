@@ -1,0 +1,14 @@
+{
+  "uuid": "adaptive-brightness@example.com",
+  "name": "Adaptive Brightness",
+  "description": "A minimal GNOME extension for adaptive brightness",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49"
+  ],
+  "url": "",
+  "version": 1
+}
