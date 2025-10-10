@@ -1,0 +1,33 @@
+{
+  "name": "gnome-extension-adaptive-brightness",
+  "version": "1.0.0",
+  "description": "A minimal GNOME extension for adaptive brightness",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {},
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "lib/**/*.js"
+    ],
+    "moduleNameMapper": {
+      "^gi://Gio$": "<rootDir>/tests/__mocks__/gi/Gio.js",
+      "^gi://GLib$": "<rootDir>/tests/__mocks__/gi/GLib.js",
+      "^resource:///org/gnome/shell/ui/main.js$": "<rootDir>/tests/__mocks__/Main.js",
+      "^resource:///org/gnome/shell/ui/messageTray.js$": "<rootDir>/tests/__mocks__/MessageTray.js",
+      "^resource:///org/gnome/shell/extensions/extension.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/extensions/extension.js"
+    }
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

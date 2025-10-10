@@ -1,14 +1,8 @@
 {
-  "uuid": "adaptive-brightness@example.com",
+  "uuid": "adaptive-brightness@dmy3k.github.io",
   "name": "Adaptive Brightness",
   "description": "A minimal GNOME extension for adaptive brightness",
-  "shell-version": [
-    "45",
-    "46",
-    "47",
-    "48",
-    "49"
-  ],
+  "shell-version": ["46", "47", "48", "49"],
   "url": "",
   "version": 1
 }
