@@ -20,12 +20,8 @@ This extension addresses some of the issues with custom implementation:
 Typically this is needed for testing and development. Clone the repo, pack and install the extension.
 
 ```bash
-git clone git@github.com:dmy3k/gnome-extension-adaptive-brightness.git
-cd gnome-extension-adaptive-brightness
+git clone git@github.com:dmy3k/gnome-extension-adaptive-brightness.git && cd gnome-extension-adaptive-brightness
 
-gnome-extensions pack --force --extra-source=lib
-gnome-extensions install --force adaptive-brightness@dmy3k.github.io.shell-extension.zip
-
-# Enable after logout and log back in to allow gnome reload extensions
-gnome-extensions enable adaptive-brightness@dmy3k.github.io
+make install
+make enable
 ```

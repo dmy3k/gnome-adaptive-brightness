@@ -1,5 +1,6 @@
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 import GLib from "gi://GLib";
+import * as LoginManager from "resource:///org/gnome/shell/misc/loginManager.js";
 import { NotificationService } from "./lib/NotificationService.js";
 import { DisplayBrightnessService } from "./lib/DisplayBrightnessService.js";
 import { SensorProxyService } from "./lib/SensorProxyService.js";
@@ -17,26 +18,24 @@ const BRIGHTNESS_BUCKETS = [
 export default class AdaptiveBrightnessExtension extends Extension {
   constructor(metadata) {
     super(metadata);
-    this.initializeServices();
-    this.initializeState();
+
+    this.ambientSignalId = null;
+    this.brightnessSignalId = null;
+    this.sleepResumeSignalId = null;
   }
 
   initializeServices() {
     this.notifications = new NotificationService();
     this.displayBrightness = new DisplayBrightnessService();
     this.sensorProxy = new SensorProxyService();
+    this.loginManager = null;
     this.userLearning = new UserPreferenceLearning();
     this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
   }
 
-  initializeState() {
-    this.ambientSignalId = null;
-    this.brightnessSignalId = null;
-    this.lightLevelSignalId = null;
-    this.sensorAvailableSignalId = null;
-  }
-
   async enable() {
+    this.initializeServices();
+
     try {
       await this.displayBrightness.start();
     } catch (error) {
@@ -67,6 +66,13 @@ export default class AdaptiveBrightnessExtension extends Extension {
       return;
     }
 
+    // Set up sleep/resume handling using GNOME Shell's LoginManager
+    // When resuming from sleep, check light level immediately
+    // This handles scenarios where we wake up in different lighting conditions
+    // and might not receive ALS events (e.g., waking in darkness)
+    this.loginManager = LoginManager.getLoginManager();
+
+    this.handleSleepResumeEvents();
     this.handleGnomeAmbientConflict();
     this.handleDisplayStateUpdates();
     this.handleBrightnessChanges();
@@ -171,6 +177,25 @@ export default class AdaptiveBrightnessExtension extends Extension {
     });
   }
 
+  handleSleepResumeEvents() {
+    if (!this.loginManager) {
+      console.warn("[AdaptiveBrightness] LoginManager not available");
+      return;
+    }
+
+    this.sleepResumeSignalId = this.loginManager.connect(
+      "prepare-for-sleep",
+      (lm, aboutToSuspend) => {
+        if (!aboutToSuspend) {
+          const luxValue = this.sensorProxy.dbus.lightLevel;
+          if (luxValue !== null) {
+            this.adjustBrightnessForLightLevel(luxValue);
+          }
+        }
+      }
+    );
+  }
+
   adjustBrightnessForLightLevel(luxValue) {
     if (!this.displayBrightness.displayIsActive || luxValue === null) {
       return;
@@ -202,7 +227,9 @@ export default class AdaptiveBrightnessExtension extends Extension {
 
     this.displayBrightness
       .animateBrightness(brightness)
-      .catch((e) => console.error("Error animating brightness:", e));
+      .catch((e) =>
+        console.error("[AdaptiveBrightness] Error animating brightness:", e)
+      );
   }
 
   disable() {
@@ -216,9 +243,16 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.brightnessSignalId = null;
     }
 
-    this.userLearning.reset();
+    if (this.sleepResumeSignalId) {
+      this.loginManager?.disconnect(this.sleepResumeSignalId);
+      this.sleepResumeSignalId = null;
+    }
+    this.loginManager = null;
+
     this.sensorProxy.destroy();
     this.displayBrightness.destroy();
     this.notifications.destroy();
+
+    this.userLearning.reset();
   }
 }

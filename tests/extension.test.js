@@ -1,11 +1,3 @@
-/**
- * Tests for extension.js
- * These tests verify critical bug fixes:
- * 1. Logic error in setAutomaticBrightness (null check)
- * 2. Async initialization race condition
- * 3. Display active state handling
- */
-
 import {
   describe,
   it,
@@ -14,8 +6,38 @@ import {
   afterEach,
   jest,
 } from "@jest/globals";
-import AdaptiveBrightnessExtension from "../extension.js";
 import GLib from "gi://GLib";
+
+// Mock all service modules before importing the extension
+const mockNotificationService = jest.fn();
+const mockDisplayBrightnessService = jest.fn();
+const mockSensorProxyService = jest.fn();
+const mockUserPreferenceLearning = jest.fn();
+const mockBucketMapper = jest.fn();
+
+jest.unstable_mockModule("../lib/NotificationService.js", () => ({
+  NotificationService: mockNotificationService,
+}));
+
+jest.unstable_mockModule("../lib/DisplayBrightnessService.js", () => ({
+  DisplayBrightnessService: mockDisplayBrightnessService,
+}));
+
+jest.unstable_mockModule("../lib/SensorProxyService.js", () => ({
+  SensorProxyService: mockSensorProxyService,
+}));
+
+jest.unstable_mockModule("../lib/UserPreferenceLearning.js", () => ({
+  UserPreferenceLearning: mockUserPreferenceLearning,
+}));
+
+jest.unstable_mockModule("../lib/BucketMapper.js", () => ({
+  BucketMapper: mockBucketMapper,
+}));
+
+const { default: AdaptiveBrightnessExtension } = await import(
+  "../extension.js"
+);
 
 describe("AdaptiveBrightnessExtension", () => {
   let extension;
@@ -23,16 +45,21 @@ describe("AdaptiveBrightnessExtension", () => {
   let mockSensorProxy;
   let mockPowerSettings;
   let mockNotifications;
+  let LoginManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Import LoginManager inside beforeEach to ensure mocks are set up
+    LoginManager = await import(
+      "resource:///org/gnome/shell/misc/loginManager.js"
+    );
+
     // Reset all mocks
     jest.clearAllMocks();
-
-    // Create extension instance
-    extension = new AdaptiveBrightnessExtension({
-      uuid: "adaptive-brightness@test.com",
-      path: "/test/path",
-    });
+    mockNotificationService.mockClear();
+    mockDisplayBrightnessService.mockClear();
+    mockSensorProxyService.mockClear();
+    mockUserPreferenceLearning.mockClear();
+    mockBucketMapper.mockClear();
 
     // Mock the services
     mockDisplayBrightness = {
@@ -45,6 +72,7 @@ describe("AdaptiveBrightnessExtension", () => {
       animateBrightness: jest.fn().mockResolvedValue(undefined),
       dbus: {
         brightness: 50,
+        disconnect: jest.fn(),
       },
       onBrightnessChanged: {
         add: jest.fn(),
@@ -102,36 +130,83 @@ describe("AdaptiveBrightnessExtension", () => {
       destroy: jest.fn(),
     };
 
-    // Replace services with mocks
-    extension.displayBrightness = mockDisplayBrightness;
-    extension.sensorProxy = mockSensorProxy;
-    extension.powerSettings = mockPowerSettings;
-    extension.notifications = mockNotifications;
+    const mockUserLearning = {
+      reset: jest.fn(),
+      recordAdjustment: jest.fn(),
+      updateBiasFromManualAdjustment: jest.fn(),
+      applyBiasTo: jest.fn((brightness) => brightness), // Pass through by default
+    };
+
+    const mockBucketMapperInstance = {
+      getBrightness: jest.fn((lux) => {
+        if (lux <= 10) return 10;
+        if (lux <= 200) return 25;
+        if (lux <= 650) return 50;
+        if (lux <= 2000) return 75;
+        return 100;
+      }),
+      mapLuxToBrightness: jest.fn((lux, withHysteresis = true) => {
+        let brightness;
+        if (lux <= 10) brightness = 10;
+        else if (lux <= 200) brightness = 25;
+        else if (lux <= 650) brightness = 50;
+        else if (lux <= 2000) brightness = 75;
+        else brightness = 100;
+
+        return { brightness };
+      }),
+    };
+
+    // Configure mock constructors to return mock instances
+    mockNotificationService.mockImplementation(() => mockNotifications);
+    mockDisplayBrightnessService.mockImplementation(
+      () => mockDisplayBrightness
+    );
+    mockSensorProxyService.mockImplementation(() => mockSensorProxy);
+    mockUserPreferenceLearning.mockImplementation(() => mockUserLearning);
+    mockBucketMapper.mockImplementation(() => mockBucketMapperInstance);
+
+    // Create extension instance
+    extension = new AdaptiveBrightnessExtension({
+      uuid: "adaptive-brightness@test.com",
+      path: "/test/path",
+    });
+
+    // Reset LoginManager singleton for each test
+    LoginManager._resetLoginManager();
   });
 
   afterEach(() => {
-    if (extension) {
+    // Only disable if extension services were initialized
+    if (extension && extension.displayBrightness) {
       extension.disable();
     }
     GLib.clearAllTimeouts();
   });
 
-  describe("Constructor", () => {
-    it("should initialize services", () => {
+  describe("Constructor and Initialization", () => {
+    it("should initialize properly on construction and enable", async () => {
       const ext = new AdaptiveBrightnessExtension({});
+
+      // Check initial state - signals should be null
+      expect(ext.ambientSignalId).toBeNull();
+      expect(ext.brightnessSignalId).toBeNull();
+      expect(ext.sleepResumeSignalId).toBeNull();
+
+      // Services should not be initialized until enable()
+      expect(ext.notifications).toBeUndefined();
+
+      await ext.enable();
+
+      // After enable, services should be initialized
       expect(ext.notifications).toBeDefined();
       expect(ext.displayBrightness).toBeDefined();
       expect(ext.sensorProxy).toBeDefined();
+      expect(ext.loginManager).toBeDefined();
       expect(ext.userLearning).toBeDefined();
       expect(ext.bucketMapper).toBeDefined();
-    });
 
-    it("should initialize state", () => {
-      const ext = new AdaptiveBrightnessExtension({});
-      expect(ext.ambientSignalId).toBeNull();
-      expect(ext.brightnessSignalId).toBeNull();
-      expect(ext.lightLevelSignalId).toBeNull();
-      expect(ext.sensorAvailableSignalId).toBeNull();
+      ext.disable();
     });
   });
 
@@ -167,6 +242,9 @@ describe("AdaptiveBrightnessExtension", () => {
         mockDisplayBrightness.onManualBrightnessChange.add
       ).toHaveBeenCalled();
       expect(mockSensorProxy.onLightLevelChanged.add).toHaveBeenCalled();
+
+      // Verify LoginManager was obtained
+      expect(extension.loginManager).not.toBeNull();
     });
 
     it("should handle displayBrightness.start() failure gracefully", async () => {
@@ -229,63 +307,36 @@ describe("AdaptiveBrightnessExtension", () => {
       await extension.enable();
     });
 
-    it("should update brightness when current brightness is null", async () => {
-      // This is the KEY test case for the nullish coalescing bug
-      // Before fix: (currentBrightness ?? Math.abs(...)) always truthy when not null
-      // After fix: Separate null check and comparison
+    it.each([
+      // [currentBrightness, targetBrightness, shouldUpdate, description]
+      [null, 75, true, "null current brightness"],
+      [50, 75, true, "difference > 1 (25)"],
+      [50, 52, true, "difference exactly 2"],
+      [50, 51, false, "difference exactly 1"],
+      [50, 50, false, "same value (0 difference)"],
+      [50.5, 51, false, "difference < 1 (0.5)"],
+      [0, 50, true, "from zero brightness"],
+      [75, 50, true, "negative difference (25)"],
+      [98, 100, true, "to maximum brightness"],
+    ])(
+      "should %s when current=%s target=%s",
+      async (current, target, shouldUpdate, description) => {
+        mockDisplayBrightness.dbus.brightness = current;
+        mockDisplayBrightness.animateBrightness.mockClear();
 
-      mockDisplayBrightness.dbus.brightness = null;
+        await extension.setAutomaticBrightness(target);
 
-      await extension.setAutomaticBrightness(75);
-
-      // Should call animateBrightness because currentBrightness is null
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(75);
-    });
-
-    it("should update brightness when difference is greater than 1", async () => {
-      mockDisplayBrightness.dbus.brightness = 50;
-
-      await extension.setAutomaticBrightness(75);
-
-      // Should call animateBrightness because |50 - 75| = 25 > 1
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(75);
-    });
-
-    it("should update brightness when difference is exactly 2", async () => {
-      mockDisplayBrightness.dbus.brightness = 50;
-
-      await extension.setAutomaticBrightness(52);
-
-      // Should call animateBrightness because |50 - 52| = 2 > 1
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(52);
-    });
-
-    it("should NOT update brightness when difference is exactly 1", async () => {
-      mockDisplayBrightness.dbus.brightness = 50;
-
-      await extension.setAutomaticBrightness(51);
-
-      // Should NOT call animateBrightness because |50 - 51| = 1 <= 1
-      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
-    });
-
-    it("should NOT update brightness when difference is 0 (same value)", async () => {
-      mockDisplayBrightness.dbus.brightness = 50;
-
-      await extension.setAutomaticBrightness(50);
-
-      // Should NOT call animateBrightness because |50 - 50| = 0 <= 1
-      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
-    });
-
-    it("should NOT update brightness when difference is less than 1", async () => {
-      mockDisplayBrightness.dbus.brightness = 50.5;
-
-      await extension.setAutomaticBrightness(51);
-
-      // Should NOT call animateBrightness because |50.5 - 51| = 0.5 <= 1
-      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
-    });
+        if (shouldUpdate) {
+          expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(
+            target
+          );
+        } else {
+          expect(
+            mockDisplayBrightness.animateBrightness
+          ).not.toHaveBeenCalled();
+        }
+      }
+    );
 
     it("should NOT update brightness when _settingBrightness is true", async () => {
       mockDisplayBrightness._settingBrightness = true;
@@ -296,33 +347,6 @@ describe("AdaptiveBrightnessExtension", () => {
       // Should NOT call animateBrightness because we're already setting brightness
       expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
     });
-
-    it("should handle zero brightness correctly", async () => {
-      mockDisplayBrightness.dbus.brightness = 0;
-
-      await extension.setAutomaticBrightness(50);
-
-      // Should call animateBrightness because |0 - 50| = 50 > 1
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(50);
-    });
-
-    it("should handle negative differences correctly", async () => {
-      mockDisplayBrightness.dbus.brightness = 75;
-
-      await extension.setAutomaticBrightness(50);
-
-      // Should call animateBrightness because |75 - 50| = 25 > 1
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(50);
-    });
-
-    it("should handle brightness value of 100", async () => {
-      mockDisplayBrightness.dbus.brightness = 98;
-
-      await extension.setAutomaticBrightness(100);
-
-      // Should call animateBrightness because |98 - 100| = 2 > 1
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(100);
-    });
   });
 
   describe("Bug Fix #3: Display Active State Override", () => {
@@ -330,58 +354,23 @@ describe("AdaptiveBrightnessExtension", () => {
       await extension.enable();
     });
 
-    it("should handle display inactive state without logging spam", async () => {
-      const consoleLogSpy = jest.spyOn(console, "log").mockImplementation();
-
-      // Get the display active changed callback
+    it("should respect display active state when adjusting brightness", async () => {
       const displayActiveCallback =
         mockDisplayBrightness.onDisplayIsActiveChanged.add.mock.calls[0][0];
 
-      // Simulate display entering dimmed/inactive state
+      // Test: Display inactive - should not update brightness
       mockDisplayBrightness.displayIsActive = false;
-      displayActiveCallback();
-
-      // Should handle gracefully without verbose logging
-      // The fix ensures silent return for inactive state
-      expect(consoleLogSpy).not.toHaveBeenCalled();
-
-      consoleLogSpy.mockRestore();
-    });
-
-    it("should update brightness when display becomes active", async () => {
-      // Get the display active changed callback
-      const displayActiveCallback =
-        mockDisplayBrightness.onDisplayIsActiveChanged.add.mock.calls[0][0];
-
-      // Reset mock to track only this call
       mockDisplayBrightness.animateBrightness.mockClear();
+      displayActiveCallback();
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
 
-      // Set a light level so we have a target brightness
-      mockSensorProxy.dbus.lightLevel = 100;
+      // Test: Display becomes active - should update brightness
       mockDisplayBrightness.displayIsActive = true;
       mockDisplayBrightness.dbus.brightness = 10;
-
-      // Simulate display becoming active
-      displayActiveCallback();
-
-      // Should attempt to update brightness when display becomes active
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalled();
-    });
-
-    it("should not update brightness when display is inactive", async () => {
-      // Get the display active changed callback
-      const displayActiveCallback =
-        mockDisplayBrightness.onDisplayIsActiveChanged.add.mock.calls[0][0];
-
-      // Reset mock
+      mockSensorProxy.dbus.lightLevel = 100; // 25% target
       mockDisplayBrightness.animateBrightness.mockClear();
-
-      // Simulate display becoming inactive
-      mockDisplayBrightness.displayIsActive = false;
       displayActiveCallback();
-
-      // Should NOT update brightness when display is inactive
-      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalled();
     });
   });
 
@@ -404,6 +393,8 @@ describe("AdaptiveBrightnessExtension", () => {
       ).toHaveBeenCalled();
       expect(mockSensorProxy.onLightLevelChanged.add).toHaveBeenCalled();
       expect(mockSensorProxy.onSensorAvailableChanged.add).toHaveBeenCalled();
+      expect(extension.loginManager).not.toBeNull();
+      expect(extension.sleepResumeSignalId).not.toBeNull();
     });
 
     it("should disable extension successfully", async () => {
@@ -413,21 +404,105 @@ describe("AdaptiveBrightnessExtension", () => {
       expect(mockDisplayBrightness.destroy).toHaveBeenCalled();
       expect(mockSensorProxy.destroy).toHaveBeenCalled();
       expect(mockNotifications.destroy).toHaveBeenCalled();
+      expect(extension.loginManager).toBeNull();
     });
 
     it("should disconnect signals on disable", async () => {
-      // Add dbus.disconnect to mock
-      mockDisplayBrightness.dbus.disconnect = jest.fn();
-
       await extension.enable();
+      const loginManager = extension.loginManager;
+      const sleepSignalId = extension.sleepResumeSignalId;
+      const brightnessSignalId = extension.brightnessSignalId;
+
+      const mockLoginDisconnect = jest.spyOn(loginManager, "disconnect");
+
       extension.disable();
 
       // Should disconnect ambient signal
       expect(mockDisplayBrightness.settings.disconnect).toHaveBeenCalled();
+
+      // Should disconnect sleep/resume signal
+      if (sleepSignalId) {
+        expect(mockLoginDisconnect).toHaveBeenCalledWith(sleepSignalId);
+      }
+      expect(extension.sleepResumeSignalId).toBeNull();
+
       // Should disconnect brightness signal if it exists
-      if (extension.brightnessSignalId) {
+      if (brightnessSignalId) {
         expect(mockDisplayBrightness.dbus.disconnect).toHaveBeenCalled();
       }
+    });
+  });
+
+  describe("Sleep/Resume Integration", () => {
+    beforeEach(async () => {
+      await extension.enable();
+    });
+
+    it("should register prepare-for-sleep handler on enable", async () => {
+      expect(extension.loginManager).not.toBeNull();
+      expect(extension.sleepResumeSignalId).not.toBeNull();
+    });
+
+    it("should adjust brightness on resume based on current light level", async () => {
+      mockDisplayBrightness.displayIsActive = true;
+
+      // Test waking in darkness (0 lux)
+      mockDisplayBrightness.dbus.brightness = 75;
+      mockSensorProxy.dbus.lightLevel = 0;
+      mockDisplayBrightness.animateBrightness.mockClear();
+      extension.loginManager._emitPrepareForSleep(false);
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(10);
+
+      // Test waking in bright conditions (5000 lux)
+      mockDisplayBrightness.dbus.brightness = 50;
+      mockSensorProxy.dbus.lightLevel = 5000;
+      mockDisplayBrightness.animateBrightness.mockClear();
+      extension.loginManager._emitPrepareForSleep(false);
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(100);
+    });
+
+    it("should NOT adjust brightness when preparing for sleep", async () => {
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      // Simulate preparing for sleep - aboutToSuspend=true
+      extension.loginManager._emitPrepareForSleep(true);
+
+      // Should NOT adjust brightness when going to sleep
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+    });
+
+    it("should handle resume with null light level gracefully", async () => {
+      mockSensorProxy.dbus.lightLevel = null;
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      // Simulate resume from sleep
+      extension.loginManager._emitPrepareForSleep(false);
+
+      // Should NOT crash or attempt to adjust brightness
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+    });
+
+    it("should handle resume when display is inactive", async () => {
+      mockDisplayBrightness.displayIsActive = false;
+      mockSensorProxy.dbus.lightLevel = 100;
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      // Simulate resume from sleep
+      extension.loginManager._emitPrepareForSleep(false);
+
+      // Should NOT adjust brightness when display is inactive
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+    });
+
+    it("should disconnect login manager signal on disable", async () => {
+      const signalId = extension.sleepResumeSignalId;
+      expect(signalId).not.toBeNull();
+
+      const mockDisconnect = jest.spyOn(extension.loginManager, "disconnect");
+      extension.disable();
+
+      expect(mockDisconnect).toHaveBeenCalledWith(signalId);
+      expect(extension.sleepResumeSignalId).toBeNull();
     });
   });
 
@@ -436,37 +511,25 @@ describe("AdaptiveBrightnessExtension", () => {
       await extension.enable();
     });
 
-    it("should map light levels to brightness correctly", async () => {
-      // Test very dark conditions (night)
-      mockDisplayBrightness.animateBrightness.mockClear();
-      mockDisplayBrightness.dbus.brightness = 50;
-      extension.adjustBrightnessForLightLevel(5); // 0-10 lux -> 10% brightness
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(10);
+    it.each([
+      [5, 10, "very dark (night)"],
+      [100, 25, "dim indoor"],
+      [300, 50, "normal indoor"],
+      [1000, 75, "bright indoor"],
+      [5000, 100, "outdoor"],
+    ])(
+      "should map %s lux to %s%% brightness (%s)",
+      async (lux, expectedBrightness, condition) => {
+        mockDisplayBrightness.dbus.brightness = 0; // Far from target to ensure update
+        mockDisplayBrightness.animateBrightness.mockClear();
 
-      // Test dim indoor
-      mockDisplayBrightness.animateBrightness.mockClear();
-      mockDisplayBrightness.dbus.brightness = 10;
-      extension.adjustBrightnessForLightLevel(100); // 5-200 lux -> 25% brightness
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(25);
+        extension.adjustBrightnessForLightLevel(lux);
 
-      // Test normal indoor
-      mockDisplayBrightness.animateBrightness.mockClear();
-      mockDisplayBrightness.dbus.brightness = 25;
-      extension.adjustBrightnessForLightLevel(300); // 50-650 lux -> 50% brightness
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(50);
-
-      // Test bright indoor
-      mockDisplayBrightness.animateBrightness.mockClear();
-      mockDisplayBrightness.dbus.brightness = 10; // Set far from target to ensure update
-      extension.adjustBrightnessForLightLevel(1000); // 350-2000 lux -> 75% brightness
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(75);
-
-      // Test outdoor
-      mockDisplayBrightness.animateBrightness.mockClear();
-      mockDisplayBrightness.dbus.brightness = 10; // Set far from target
-      extension.adjustBrightnessForLightLevel(5000); // 1000-10000 lux -> 100% brightness
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(100);
-    });
+        expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(
+          expectedBrightness
+        );
+      }
+    );
   });
 
   describe("User Learning Integration", () => {

@@ -18,6 +18,7 @@ class DBusProxy {
     const proxy = new DBusProxy();
     proxy._busName = busName;
     proxy._objectPath = objectPath;
+    proxy._busType = bus?._busType; // Store bus type from the bus object
     process.nextTick(() =>
       callback(null, {
         __asyncResult: true,
@@ -54,6 +55,15 @@ class DBusProxy {
     return signalId;
   }
 
+  connectSignal(signalName, callback) {
+    // For backward compatibility, map to g-signal connection
+    return this.connect("g-signal", (proxy, sender, sigName, params) => {
+      if (sigName === signalName) {
+        callback(proxy, sender, params);
+      }
+    });
+  }
+
   disconnect(signalId) {
     for (const [signalName, handlers] of this._signals.entries()) {
       if (handlers.has(signalId)) {
@@ -63,11 +73,34 @@ class DBusProxy {
     }
   }
 
+  disconnectSignal(signalId) {
+    // Alias for disconnect
+    this.disconnect(signalId);
+  }
+
   emit(signalName, ...args) {
     const handlers = this._signals.get(signalName);
     if (handlers) {
-      handlers.forEach((callback) => callback(this, ...args));
+      handlers.forEach((callback) => {
+        try {
+          callback(this, ...args);
+        } catch (error) {
+          // Silently catch errors to match GJS behavior
+          // In real GJS, signal handler errors don't crash the system
+        }
+      });
     }
+  }
+
+  emitSignal(signalName, ...args) {
+    // Emit DBus signal using g-signal event (GJS standard)
+    // Real GJS signature: (proxy, sender, signalName, parameters)
+    // where parameters is a GVariant
+    const parameters = {
+      deep_unpack: () => args,
+      unpack: () => args[0],
+    };
+    this.emit("g-signal", null, signalName, parameters);
   }
 
   call(method, params, flags, timeout, cancellable, callback) {
@@ -149,7 +182,10 @@ class Settings {
 export const BusType = { SESSION: 0, SYSTEM: 1 };
 export const DBusProxyFlags = { NONE: 0 };
 export const DBusCallFlags = { NONE: 0 };
-export const bus_get_sync = () => ({ __isMockBus: true });
+export const bus_get_sync = (busType) => ({
+  __isMockBus: true,
+  _busType: busType,
+});
 export { DBusProxy, Settings };
 
 export default {

@@ -22,7 +22,8 @@
       "^gi://GLib$": "<rootDir>/tests/__mocks__/gi/GLib.js",
       "^resource:///org/gnome/shell/ui/main.js$": "<rootDir>/tests/__mocks__/Main.js",
       "^resource:///org/gnome/shell/ui/messageTray.js$": "<rootDir>/tests/__mocks__/MessageTray.js",
-      "^resource:///org/gnome/shell/extensions/extension.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/extensions/extension.js"
+      "^resource:///org/gnome/shell/extensions/extension.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/extensions/extension.js",
+      "^resource:///org/gnome/shell/misc/loginManager.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/misc/loginManager.js"
     }
   },
   "devDependencies": {
