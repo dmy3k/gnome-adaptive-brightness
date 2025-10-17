@@ -2,6 +2,8 @@
 
 GNOME Shell extension that automatically adjusts your screen brightness based on ambient light conditions, helping to reduce eye strain and save energy.
 
+ALS (ambient light sensor) is required for extesion to operate.
+
 # Background
 
 GNOME includes "Automatic Screen Brightness" feature, under Settings -> Power -> Power Saving.

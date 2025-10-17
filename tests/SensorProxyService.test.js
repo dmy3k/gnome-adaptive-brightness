@@ -55,11 +55,6 @@ describe("SensorProxyService", () => {
       expect(service._throttleTimeoutMs).toBe(1000);
     });
 
-    it("should initialize polling parameters", () => {
-      expect(service._pollTimeout).toBeNull();
-      expect(service._pollIntervalMs).toBe(120000);
-    });
-
     it("should initialize light level and sensor availability", () => {
       expect(service.dbus.lightLevel).toBeNull();
       expect(service.dbus.hasAmbientLight).toBeNull();
@@ -94,12 +89,6 @@ describe("SensorProxyService", () => {
       // Verify service is properly initialized
       expect(service.dbus._proxy).not.toBeNull();
       expect(service._signalId).not.toBeNull();
-    });
-
-    it("should start polling", async () => {
-      await service.start();
-
-      expect(service._pollTimeout).not.toBeNull();
     });
 
     it("should handle claim light error", async () => {
@@ -315,87 +304,6 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("polling mechanism", () => {
-    beforeEach(async () => {
-      await service.start();
-    });
-
-    it("should poll at regular intervals", () => {
-      service._stopPolling();
-      service._startPolling();
-
-      expect(service._pollTimeout).not.toBeNull();
-    });
-
-    it("should use 120 second poll interval", () => {
-      expect(service._pollIntervalMs).toBe(120000);
-    });
-
-    it("should create continuous timer that returns SOURCE_CONTINUE", () => {
-      service._stopPolling();
-
-      // Start polling creates a timeout
-      service._startPolling();
-
-      expect(service._pollTimeout).not.toBeNull();
-      expect(service._pollTimeout).toBeGreaterThan(0);
-    });
-
-    it("should check time threshold before polling", async () => {
-      mockProxy = service.dbus._proxy;
-      mockProxy.set_cached_property("LightLevel", 350);
-
-      // Set last update time to recent
-      service._lastUpdateTime = Date.now() - 1000; // 1 second ago
-      const callback = jest.fn();
-      service.onLightLevelChanged.add(callback);
-
-      // Directly call _processLightLevelUpdate when threshold not met
-      const now = Date.now();
-      if (now - service._lastUpdateTime <= service._pollIntervalMs) {
-        // Should not process
-        expect(callback).not.toHaveBeenCalled();
-      }
-    });
-
-    it("should process update when time threshold exceeded", () => {
-      mockProxy = service.dbus._proxy;
-      mockProxy.set_cached_property("LightLevel", 350);
-
-      // Set last update time to long ago (more than poll interval)
-      service._lastUpdateTime = Date.now() - 150000; // 150 seconds ago (> 120s interval)
-      const callback = jest.fn();
-      service.onLightLevelChanged.add(callback);
-
-      // Simulate what the poll timer does (simplified logic after your change)
-      if (Date.now() - service._lastUpdateTime > service._pollIntervalMs) {
-        service._handleLightLevelChange(service.dbus?.lightLevel);
-      }
-
-      // Should have called the callback because enough time passed
-      expect(callback).toHaveBeenCalledWith(350);
-    });
-
-    it("should handle null dbus gracefully during poll", () => {
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-
-      service.dbus = null;
-
-      // Simulate poll callback (simplified logic after your change)
-      try {
-        if (Date.now() - service._lastUpdateTime > service._pollIntervalMs) {
-          service._handleLightLevelChange(service.dbus?.lightLevel);
-        }
-      } catch (error) {
-        console.error("SensorProxyService: Polling error:", error);
-      }
-
-      // Should not have logged error because dbus?.lightLevel safely returns undefined
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
-    });
-  });
   describe("destroy", () => {
     it("should clear pending timeout", async () => {
       await service.start();
@@ -407,16 +315,6 @@ describe("SensorProxyService", () => {
       service.destroy();
 
       expect(service._pendingTimeout).toBeNull();
-    });
-
-    it("should clear polling timeout", async () => {
-      await service.start();
-
-      expect(service._pollTimeout).not.toBeNull();
-
-      service.destroy();
-
-      expect(service._pollTimeout).toBeNull();
     });
 
     it("should disconnect proxy signal", async () => {
@@ -668,74 +566,6 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("polling with filter function", () => {
-    let serviceWithFilter;
-
-    beforeEach(async () => {
-      // Filter that only allows changes >= 100 lux
-      const filterFn = (prev, curr) => {
-        if (prev === null || curr === null) return true;
-        return Math.abs(curr - prev) >= 100;
-      };
-      serviceWithFilter = new SensorProxyService(filterFn);
-      await serviceWithFilter.start();
-      mockProxy = serviceWithFilter.dbus._proxy;
-    });
-
-    afterEach(() => {
-      if (serviceWithFilter) {
-        serviceWithFilter.destroy();
-      }
-    });
-
-    it("should respect filter function during polling", () => {
-      mockProxy.set_cached_property("LightLevel", 150);
-      serviceWithFilter._lastLuxValue = 120;
-      serviceWithFilter._lastUpdateTime = Date.now() - 150000; // Beyond poll interval
-
-      const callback = jest.fn();
-      serviceWithFilter.onLightLevelChanged.add(callback);
-
-      // Simulate what _poll does
-      if (
-        Date.now() - serviceWithFilter._lastUpdateTime >
-        serviceWithFilter._pollIntervalMs
-      ) {
-        serviceWithFilter._handleLightLevelChange(
-          serviceWithFilter.dbus?.lightLevel
-        );
-      }
-
-      // 120 to 150 is only 30 lux (< 100), filter rejects
-      // Polling respects filter function
-      expect(callback).not.toHaveBeenCalled();
-      // But lastLuxValue is still updated
-      expect(serviceWithFilter._lastLuxValue).toBe(150);
-    });
-
-    it("should process filter-passing changes during polling", () => {
-      mockProxy.set_cached_property("LightLevel", 250);
-      serviceWithFilter._lastLuxValue = 120;
-      serviceWithFilter._lastUpdateTime = Date.now() - 150000;
-
-      const callback = jest.fn();
-      serviceWithFilter.onLightLevelChanged.add(callback);
-
-      // Simulate _poll
-      if (
-        Date.now() - serviceWithFilter._lastUpdateTime >
-        serviceWithFilter._pollIntervalMs
-      ) {
-        serviceWithFilter._handleLightLevelChange(
-          serviceWithFilter.dbus?.lightLevel
-        );
-      }
-
-      // 120 to 250 is 130 lux (>= 100), filter passes
-      expect(callback).toHaveBeenCalledWith(250);
-    });
-  });
-
   describe("destroy", () => {
     it("should clear pending timeout", async () => {
       await service.start();
@@ -747,16 +577,6 @@ describe("SensorProxyService", () => {
       service.destroy();
 
       expect(service._pendingTimeout).toBeNull();
-    });
-
-    it("should clear polling timeout", async () => {
-      await service.start();
-
-      expect(service._pollTimeout).not.toBeNull();
-
-      service.destroy();
-
-      expect(service._pollTimeout).toBeNull();
     });
 
     it("should disconnect proxy signal", async () => {
