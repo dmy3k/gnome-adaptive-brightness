@@ -34,10 +34,25 @@ describe("SensorProxyService", () => {
       expect(service._signalId).toBeNull();
     });
 
+    it("should initialize with no filter function by default", () => {
+      expect(service._filterFn).toBeNull();
+      expect(service._lastLuxValue).toBeNull();
+    });
+
+    it("should accept filter function parameter", () => {
+      const filterFn = (prev, curr) => prev !== curr;
+      const serviceWithFilter = new SensorProxyService(filterFn);
+
+      expect(serviceWithFilter._filterFn).toBe(filterFn);
+      expect(serviceWithFilter._lastLuxValue).toBeNull();
+
+      serviceWithFilter.destroy();
+    });
+
     it("should initialize timeout tracking", () => {
       expect(service._pendingTimeout).toBeNull();
       expect(service._lastUpdateTime).toBe(0);
-      expect(service._throttleTimeoutMs).toBe(2000);
+      expect(service._throttleTimeoutMs).toBe(1000);
     });
 
     it("should initialize polling parameters", () => {
@@ -288,12 +303,15 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(250);
     });
 
-    it("should update last update time", () => {
-      const before = service._lastUpdateTime;
+    it("should update last update time", async () => {
+      const before = Date.now();
+
+      // Small delay to ensure time difference
+      await new Promise((resolve) => setTimeout(resolve, 1));
 
       service._processLightLevelUpdate(250);
 
-      expect(service._lastUpdateTime).toBeGreaterThan(before);
+      expect(service._lastUpdateTime).toBeGreaterThanOrEqual(before);
     });
   });
 
@@ -349,13 +367,9 @@ describe("SensorProxyService", () => {
       const callback = jest.fn();
       service.onLightLevelChanged.add(callback);
 
-      // Simulate what the poll timer does
-      if (
-        service.dbus &&
-        Date.now() - service._lastUpdateTime > service._pollIntervalMs
-      ) {
-        const level = service.dbus.lightLevel;
-        service._processLightLevelUpdate(level);
+      // Simulate what the poll timer does (simplified logic after your change)
+      if (Date.now() - service._lastUpdateTime > service._pollIntervalMs) {
+        service._handleLightLevelChange(service.dbus?.lightLevel);
       }
 
       // Should have called the callback because enough time passed
@@ -367,24 +381,361 @@ describe("SensorProxyService", () => {
 
       service.dbus = null;
 
-      // Simulate poll callback
+      // Simulate poll callback (simplified logic after your change)
       try {
-        if (
-          service.dbus &&
-          Date.now() - service._lastUpdateTime > service._pollIntervalMs
-        ) {
-          service._processLightLevelUpdate();
+        if (Date.now() - service._lastUpdateTime > service._pollIntervalMs) {
+          service._handleLightLevelChange(service.dbus?.lightLevel);
         }
       } catch (error) {
         console.error("SensorProxyService: Polling error:", error);
       }
 
-      // Should not have logged error because dbus check prevents call
+      // Should not have logged error because dbus?.lightLevel safely returns undefined
       expect(consoleErrorSpy).not.toHaveBeenCalled();
 
       consoleErrorSpy.mockRestore();
     });
   });
+  describe("destroy", () => {
+    it("should clear pending timeout", async () => {
+      await service.start();
+      service._lastUpdateTime = Date.now() - 500;
+      service._handleLightLevelChange(400);
+
+      expect(service._pendingTimeout).not.toBeNull();
+
+      service.destroy();
+
+      expect(service._pendingTimeout).toBeNull();
+    });
+
+    it("should clear polling timeout", async () => {
+      await service.start();
+
+      expect(service._pollTimeout).not.toBeNull();
+
+      service.destroy();
+
+      expect(service._pollTimeout).toBeNull();
+    });
+
+    it("should disconnect proxy signal", async () => {
+      await service.start();
+      const signalId = service._signalId;
+
+      expect(signalId).not.toBeNull();
+
+      service.destroy();
+
+      expect(service._signalId).toBeNull();
+    });
+
+    it("should release light sensor", async () => {
+      await service.start();
+      mockProxy = service.dbus._proxy;
+
+      service.destroy();
+
+      expect(service.dbus._proxy).toBeNull();
+    });
+
+    it("should clear callbacks", async () => {
+      await service.start();
+      const lightCallback = jest.fn();
+      const sensorCallback = jest.fn();
+
+      service.onLightLevelChanged.add(lightCallback);
+      service.onSensorAvailableChanged.add(sensorCallback);
+
+      service.destroy();
+
+      expect(service.onLightLevelChanged.size).toBe(0);
+      expect(service.onSensorAvailableChanged.size).toBe(0);
+    });
+
+    it("should handle destroy when not started", () => {
+      expect(() => service.destroy()).not.toThrow();
+    });
+
+    it("should handle multiple destroy calls", async () => {
+      await service.start();
+      service.destroy();
+      expect(() => service.destroy()).not.toThrow();
+    });
+  });
+
+  describe("filter function in _handleLightLevelChange", () => {
+    let serviceWithFilter;
+
+    beforeEach(async () => {
+      // Create a filter function that only allows changes >= 100 lux
+      const filterFn = (prev, curr) => {
+        if (prev === null || curr === null) return true;
+        return Math.abs(curr - prev) >= 100;
+      };
+      serviceWithFilter = new SensorProxyService(filterFn);
+      await serviceWithFilter.start();
+      mockProxy = serviceWithFilter.dbus._proxy;
+    });
+
+    afterEach(() => {
+      if (serviceWithFilter) {
+        serviceWithFilter.destroy();
+      }
+    });
+
+    it("should filter changes when filter function returns false", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      // Set initial value
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // Small change (< 100) - filter should return false
+      serviceWithFilter._handleLightLevelChange(450);
+
+      // Should be filtered - callback not invoked
+      expect(callback).not.toHaveBeenCalled();
+
+      // But lastLuxValue should be updated
+      expect(serviceWithFilter._lastLuxValue).toBe(450);
+    });
+
+    it("should process changes when filter function returns true", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      // Set initial value
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // Large change (>= 100) - filter should return true
+      serviceWithFilter._handleLightLevelChange(550);
+
+      // Should be processed - callback invoked
+      expect(callback).toHaveBeenCalledWith(550);
+    });
+
+    it("should bypass filtering when forceUpdate is true", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      // Set initial value
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // Small change but force update
+      serviceWithFilter._handleLightLevelChange(450, true);
+
+      // Should be processed despite filter returning false
+      expect(callback).toHaveBeenCalledWith(450);
+    });
+
+    it("should update lastLuxValue even when filtered", () => {
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // Filtered change
+      serviceWithFilter._handleLightLevelChange(420);
+
+      expect(serviceWithFilter._lastLuxValue).toBe(420);
+    });
+
+    it("should process first event after startup (lastLuxValue is null)", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      serviceWithFilter._lastUpdateTime = 0;
+      serviceWithFilter._lastLuxValue = null;
+
+      // First event should always be processed (filter returns true for null)
+      serviceWithFilter._handleLightLevelChange(400);
+
+      expect(callback).toHaveBeenCalledWith(400);
+      expect(serviceWithFilter._lastLuxValue).toBe(400);
+    });
+
+    it("should handle rapid fluctuations when filter rejects them", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // Multiple small changes (< 100)
+      serviceWithFilter._handleLightLevelChange(420);
+      serviceWithFilter._handleLightLevelChange(430);
+      serviceWithFilter._handleLightLevelChange(410);
+      serviceWithFilter._handleLightLevelChange(450);
+
+      // All should be filtered
+      expect(callback).not.toHaveBeenCalled();
+
+      // But lastLuxValue should track latest
+      expect(serviceWithFilter._lastLuxValue).toBe(450);
+    });
+
+    it("should work with throttling and filtering together", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 500; // Recent update
+
+      // Large change that passes filter but within throttle period
+      serviceWithFilter._handleLightLevelChange(550);
+
+      // Should be delayed, not immediate
+      expect(callback).not.toHaveBeenCalled();
+      expect(serviceWithFilter._pendingTimeout).not.toBeNull();
+    });
+  });
+
+  describe("forceUpdate", () => {
+    let serviceWithFilter;
+
+    beforeEach(async () => {
+      // Filter that only allows changes >= 100 lux
+      const filterFn = (prev, curr) => {
+        if (prev === null || curr === null) return true;
+        return Math.abs(curr - prev) >= 100;
+      };
+      serviceWithFilter = new SensorProxyService(filterFn);
+      await serviceWithFilter.start();
+      mockProxy = serviceWithFilter.dbus._proxy;
+    });
+
+    afterEach(() => {
+      if (serviceWithFilter) {
+        serviceWithFilter.destroy();
+      }
+    });
+
+    it("should force update even when filter would reject", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      mockProxy.set_cached_property("LightLevel", 150);
+      serviceWithFilter._lastLuxValue = 120;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // 120 to 150 is only 30 lux change (< 100), filter would reject
+      // But forceUpdate should process it
+      serviceWithFilter.forceUpdate();
+
+      expect(callback).toHaveBeenCalledWith(150);
+    });
+
+    it("should handle null lightLevel gracefully", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      mockProxy.set_cached_property("LightLevel", null);
+
+      serviceWithFilter.forceUpdate();
+
+      // Should not invoke callback when lightLevel is null
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it("should update lastLuxValue", () => {
+      mockProxy.set_cached_property("LightLevel", 300);
+      serviceWithFilter._lastLuxValue = 100;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      serviceWithFilter.forceUpdate();
+
+      expect(serviceWithFilter._lastLuxValue).toBe(300);
+    });
+
+    it("should work for use case: sleep/resume", () => {
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      // Before sleep: indoor lighting
+      mockProxy.set_cached_property("LightLevel", 400);
+      serviceWithFilter._lastLuxValue = 400;
+      serviceWithFilter._lastUpdateTime = Date.now() - 3000;
+
+      // After resume: outdoor lighting (significant change)
+      mockProxy.set_cached_property("LightLevel", 5000);
+
+      serviceWithFilter.forceUpdate();
+
+      expect(callback).toHaveBeenCalledWith(5000);
+      expect(serviceWithFilter._lastLuxValue).toBe(5000);
+    });
+  });
+
+  describe("polling with filter function", () => {
+    let serviceWithFilter;
+
+    beforeEach(async () => {
+      // Filter that only allows changes >= 100 lux
+      const filterFn = (prev, curr) => {
+        if (prev === null || curr === null) return true;
+        return Math.abs(curr - prev) >= 100;
+      };
+      serviceWithFilter = new SensorProxyService(filterFn);
+      await serviceWithFilter.start();
+      mockProxy = serviceWithFilter.dbus._proxy;
+    });
+
+    afterEach(() => {
+      if (serviceWithFilter) {
+        serviceWithFilter.destroy();
+      }
+    });
+
+    it("should respect filter function during polling", () => {
+      mockProxy.set_cached_property("LightLevel", 150);
+      serviceWithFilter._lastLuxValue = 120;
+      serviceWithFilter._lastUpdateTime = Date.now() - 150000; // Beyond poll interval
+
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      // Simulate what _poll does
+      if (
+        Date.now() - serviceWithFilter._lastUpdateTime >
+        serviceWithFilter._pollIntervalMs
+      ) {
+        serviceWithFilter._handleLightLevelChange(
+          serviceWithFilter.dbus?.lightLevel
+        );
+      }
+
+      // 120 to 150 is only 30 lux (< 100), filter rejects
+      // Polling respects filter function
+      expect(callback).not.toHaveBeenCalled();
+      // But lastLuxValue is still updated
+      expect(serviceWithFilter._lastLuxValue).toBe(150);
+    });
+
+    it("should process filter-passing changes during polling", () => {
+      mockProxy.set_cached_property("LightLevel", 250);
+      serviceWithFilter._lastLuxValue = 120;
+      serviceWithFilter._lastUpdateTime = Date.now() - 150000;
+
+      const callback = jest.fn();
+      serviceWithFilter.onLightLevelChanged.add(callback);
+
+      // Simulate _poll
+      if (
+        Date.now() - serviceWithFilter._lastUpdateTime >
+        serviceWithFilter._pollIntervalMs
+      ) {
+        serviceWithFilter._handleLightLevelChange(
+          serviceWithFilter.dbus?.lightLevel
+        );
+      }
+
+      // 120 to 250 is 130 lux (>= 100), filter passes
+      expect(callback).toHaveBeenCalledWith(250);
+    });
+  });
+
   describe("destroy", () => {
     it("should clear pending timeout", async () => {
       await service.start();

@@ -32,6 +32,83 @@ describe("BucketMapper", () => {
     });
   });
 
+  describe("crossesBucketBoundary", () => {
+    test("should return true when previousLux is null", () => {
+      expect(mapper.crossesBucketBoundary(null, 100)).toBe(true);
+    });
+
+    test("should return true when currentLux is null", () => {
+      expect(mapper.crossesBucketBoundary(100, null)).toBe(true);
+    });
+
+    test("should return true when exiting bucket 0", () => {
+      // 5 is in bucket 0 [0, 10], 50 is outside bucket 0
+      expect(mapper.crossesBucketBoundary(5, 50)).toBe(true);
+    });
+
+    test("should return true when exiting bucket at max boundary", () => {
+      // 10 is in bucket 0 [0, 10], 50 is outside
+      expect(mapper.crossesBucketBoundary(10, 50)).toBe(true);
+    });
+
+    test("should return true when exiting any bucket even if staying in another", () => {
+      // 100 is in bucket 1 [5, 200] AND bucket 2 [50, 650]
+      // 400 is in bucket 2 [50, 650] AND bucket 3 [350, 2000]
+      // Exits bucket 1, so should return true
+      expect(mapper.crossesBucketBoundary(100, 400)).toBe(true);
+    });
+
+    test("should return false when staying within overlapping region", () => {
+      // 100 is in both bucket 1 [5, 200] and bucket 2 [50, 650]
+      // 150 is also in both
+      expect(mapper.crossesBucketBoundary(100, 150)).toBe(false);
+    });
+
+    test("should return true when exiting an overlapping region", () => {
+      // 100 is in buckets 1 and 2, but 700 is only in bucket 3
+      // Exits bucket 2 [50, 650]
+      expect(mapper.crossesBucketBoundary(100, 700)).toBe(true);
+    });
+
+    test("should return true when crossing from bucket 2 to 3", () => {
+      // 400 in bucket 2 [50, 650], 700 in bucket 3 [350, 2000]
+      // Exits bucket 2
+      expect(mapper.crossesBucketBoundary(400, 700)).toBe(true);
+    });
+
+    test("should return false when staying in bucket 3", () => {
+      // Both in bucket 3 [350, 2000]
+      expect(mapper.crossesBucketBoundary(1000, 1500)).toBe(false);
+    });
+
+    test("should return true when going from bucket 4 to 0", () => {
+      // 5000 in bucket 4 [1000, 10000], 5 in bucket 0 [0, 10]
+      expect(mapper.crossesBucketBoundary(5000, 5)).toBe(true);
+    });
+
+    test("should return false when both values identical", () => {
+      expect(mapper.crossesBucketBoundary(100, 100)).toBe(false);
+    });
+
+    test("should handle boundary values correctly", () => {
+      // At bucket 0 max boundary
+      expect(mapper.crossesBucketBoundary(10, 10)).toBe(false);
+
+      // Crossing from 10 to 11 - exits bucket 0 [0, 10]
+      expect(mapper.crossesBucketBoundary(10, 11)).toBe(true);
+
+      // At bucket 2 min boundary, staying in range
+      expect(mapper.crossesBucketBoundary(50, 100)).toBe(false);
+    });
+
+    test("should work with empty buckets array", () => {
+      const emptyMapper = new BucketMapper([]);
+      // No buckets means we can't determine if they're in the same bucket
+      // Safer to return true and let the event through
+      expect(emptyMapper.crossesBucketBoundary(100, 200)).toBe(true);
+    });
+  });
+
   describe("isLuxInBucket", () => {
     test("should return true when lux is within bucket range", () => {
       const bucket = { min: 50, max: 650, brightness: 50 };

@@ -70,6 +70,7 @@ describe("AdaptiveBrightnessExtension", () => {
       displayIsActive: true,
       setBrightness: jest.fn().mockResolvedValue(undefined),
       animateBrightness: jest.fn().mockResolvedValue(undefined),
+      haltAnimatingBrightness: jest.fn(),
       dbus: {
         brightness: 50,
         disconnect: jest.fn(),
@@ -100,6 +101,14 @@ describe("AdaptiveBrightnessExtension", () => {
     mockSensorProxy = {
       start: jest.fn().mockResolvedValue(undefined),
       destroy: jest.fn(),
+      forceUpdate: jest.fn(() => {
+        // Simulate what forceUpdate does - invokes the light level changed callback
+        const callback =
+          mockSensorProxy.onLightLevelChanged.add.mock.calls[0]?.[0];
+        if (callback && mockSensorProxy.dbus.lightLevel !== null) {
+          callback(mockSensorProxy.dbus.lightLevel);
+        }
+      }),
       dbus: {
         lightLevel: 100,
         hasAmbientLight: true,
@@ -155,6 +164,20 @@ describe("AdaptiveBrightnessExtension", () => {
 
         return { brightness };
       }),
+      crossesBucketBoundary: jest.fn((prev, curr) => {
+        // Simple mock: return true if values cross bucket boundaries
+        if (prev === null || curr === null) return true;
+
+        const getBucket = (lux) => {
+          if (lux <= 10) return 0;
+          if (lux <= 200) return 1;
+          if (lux <= 650) return 2;
+          if (lux <= 2000) return 3;
+          return 4;
+        };
+
+        return getBucket(prev) !== getBucket(curr);
+      }),
     };
 
     // Configure mock constructors to return mock instances
@@ -162,7 +185,7 @@ describe("AdaptiveBrightnessExtension", () => {
     mockDisplayBrightnessService.mockImplementation(
       () => mockDisplayBrightness
     );
-    mockSensorProxyService.mockImplementation(() => mockSensorProxy);
+    mockSensorProxyService.mockImplementation((filterFn) => mockSensorProxy);
     mockUserPreferenceLearning.mockImplementation(() => mockUserLearning);
     mockBucketMapper.mockImplementation(() => mockBucketMapperInstance);
 
@@ -302,50 +325,70 @@ describe("AdaptiveBrightnessExtension", () => {
     });
   });
 
-  describe("Bug Fix #1: setAutomaticBrightness Logic Error", () => {
+  describe("Brightness Adjustment", () => {
     beforeEach(async () => {
       await extension.enable();
     });
 
-    it.each([
-      // [currentBrightness, targetBrightness, shouldUpdate, description]
-      [null, 75, true, "null current brightness"],
-      [50, 75, true, "difference > 1 (25)"],
-      [50, 52, true, "difference exactly 2"],
-      [50, 51, false, "difference exactly 1"],
-      [50, 50, false, "same value (0 difference)"],
-      [50.5, 51, false, "difference < 1 (0.5)"],
-      [0, 50, true, "from zero brightness"],
-      [75, 50, true, "negative difference (25)"],
-      [98, 100, true, "to maximum brightness"],
-    ])(
-      "should %s when current=%s target=%s",
-      async (current, target, shouldUpdate, description) => {
-        mockDisplayBrightness.dbus.brightness = current;
-        mockDisplayBrightness.animateBrightness.mockClear();
+    it("should adjust brightness directly using animateBrightness", async () => {
+      mockDisplayBrightness.displayIsActive = true;
+      mockSensorProxy.dbus.lightLevel = 100; // Should map to 25% brightness
+      mockDisplayBrightness.animateBrightness.mockClear();
 
-        await extension.setAutomaticBrightness(target);
+      await extension.adjustBrightnessForLightLevel(100);
 
-        if (shouldUpdate) {
-          expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(
-            target
-          );
-        } else {
-          expect(
-            mockDisplayBrightness.animateBrightness
-          ).not.toHaveBeenCalled();
-        }
-      }
-    );
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(25);
+    });
 
-    it("should NOT update brightness when _settingBrightness is true", async () => {
-      mockDisplayBrightness._settingBrightness = true;
-      mockDisplayBrightness.dbus.brightness = 50;
+    it("should NOT adjust brightness when display is inactive", async () => {
+      mockDisplayBrightness.displayIsActive = false;
+      mockSensorProxy.dbus.lightLevel = 100;
+      mockDisplayBrightness.animateBrightness.mockClear();
 
-      await extension.setAutomaticBrightness(100);
+      await extension.adjustBrightnessForLightLevel(100);
 
-      // Should NOT call animateBrightness because we're already setting brightness
       expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+    });
+
+    it("should NOT adjust brightness when luxValue is null", async () => {
+      mockDisplayBrightness.displayIsActive = true;
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      await extension.adjustBrightnessForLightLevel(null);
+
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+    });
+
+    it("should apply user learning bias to target brightness", async () => {
+      const mockUserLearning = extension.userLearning;
+      mockUserLearning.applyBiasTo.mockReturnValue(30); // Biased from 25 to 30
+
+      mockDisplayBrightness.displayIsActive = true;
+      mockSensorProxy.dbus.lightLevel = 100; // Should map to 25% brightness
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      await extension.adjustBrightnessForLightLevel(100);
+
+      expect(mockUserLearning.applyBiasTo).toHaveBeenCalledWith(25);
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(30);
+    });
+
+    it("should handle animation errors gracefully", async () => {
+      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
+      mockDisplayBrightness.displayIsActive = true;
+      mockSensorProxy.dbus.lightLevel = 100;
+      mockDisplayBrightness.animateBrightness.mockRejectedValue(
+        new Error("Animation failed")
+      );
+
+      await extension.adjustBrightnessForLightLevel(100);
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "[AdaptiveBrightness] Error animating brightness:",
+        expect.any(Error)
+      );
+
+      consoleErrorSpy.mockRestore();
     });
   });
 

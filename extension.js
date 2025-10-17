@@ -27,10 +27,15 @@ export default class AdaptiveBrightnessExtension extends Extension {
   initializeServices() {
     this.notifications = new NotificationService();
     this.displayBrightness = new DisplayBrightnessService();
-    this.sensorProxy = new SensorProxyService();
+    this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
+
+    // Pass bucket boundary filter to sensor service for efficient event filtering
+    this.sensorProxy = new SensorProxyService(
+      this.bucketMapper.crossesBucketBoundary.bind(this.bucketMapper)
+    );
+
     this.loginManager = null;
     this.userLearning = new UserPreferenceLearning();
-    this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
   }
 
   async enable() {
@@ -187,10 +192,8 @@ export default class AdaptiveBrightnessExtension extends Extension {
       "prepare-for-sleep",
       (lm, aboutToSuspend) => {
         if (!aboutToSuspend) {
-          const luxValue = this.sensorProxy.dbus.lightLevel;
-          if (luxValue !== null) {
-            this.adjustBrightnessForLightLevel(luxValue);
-          }
+          // Force an update on resume to handle lighting changes during sleep
+          this.sensorProxy.forceUpdate();
         }
       }
     );
@@ -207,29 +210,12 @@ export default class AdaptiveBrightnessExtension extends Extension {
       const biasedBrightness = this.userLearning.applyBiasTo(
         targetBucket.brightness
       );
-      this.setAutomaticBrightness(biasedBrightness);
+      this.displayBrightness
+        .animateBrightness(biasedBrightness)
+        .catch((e) =>
+          console.error("[AdaptiveBrightness] Error animating brightness:", e)
+        );
     }
-  }
-
-  setAutomaticBrightness(brightness) {
-    const currentBrightness = this.displayBrightness.dbus.brightness;
-
-    if (this.displayBrightness._settingBrightness) {
-      return;
-    }
-
-    if (
-      currentBrightness !== null &&
-      Math.abs(currentBrightness - brightness) <= 1
-    ) {
-      return;
-    }
-
-    this.displayBrightness
-      .animateBrightness(brightness)
-      .catch((e) =>
-        console.error("[AdaptiveBrightness] Error animating brightness:", e)
-      );
   }
 
   disable() {

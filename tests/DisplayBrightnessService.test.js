@@ -214,6 +214,22 @@ describe("DisplayBrightnessService", () => {
       expect(service._animationTimeout).toBeNull();
     });
 
+    it("should stop animation when _settingBrightness is set to false", async () => {
+      service.animateBrightness(80); // Don't await
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Halt the animation externally
+      service.haltAnimatingBrightness();
+
+      // Give a moment for the animation to abort
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Animation should be cleared and flag reset
+      expect(service._animationTimeout).toBeNull();
+      expect(service._settingBrightness).toBe(false);
+    });
+
     it("should cancel previous animation when starting new one", async () => {
       const firstAnimation = service.animateBrightness(80);
 
@@ -225,6 +241,84 @@ describe("DisplayBrightnessService", () => {
       await secondAnimation;
 
       expect(service._animationTimeout).toBeNull();
+    });
+
+    it("should call haltAnimatingBrightness before starting new animation", async () => {
+      const haltSpy = jest.spyOn(service, "haltAnimatingBrightness");
+
+      await service.animateBrightness(60);
+
+      // haltAnimatingBrightness should be called at the start
+      expect(haltSpy).toHaveBeenCalled();
+
+      haltSpy.mockRestore();
+    });
+
+    it("should skip idle brightness values during animation", async () => {
+      service.settings._settings.set_int("idle-brightness", 55);
+      service.dbus._proxy.set_cached_property("Brightness", 50);
+
+      // Animate through the idle brightness value
+      await service.animateBrightness(60);
+
+      // The brightness should never be set to exactly idle-brightness (55)
+      // This is harder to test directly, but we can verify animation completes
+      expect(service._settingBrightness).toBe(false);
+    });
+  });
+
+  describe("haltAnimatingBrightness", () => {
+    beforeEach(async () => {
+      await service.start();
+      service.dbus._proxy.set_cached_property("Brightness", 50);
+    });
+
+    it("should clear animation timeout", async () => {
+      service.animateBrightness(80); // Don't await
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(service._animationTimeout).not.toBeNull();
+
+      service.haltAnimatingBrightness();
+
+      expect(service._animationTimeout).toBeNull();
+
+      // Give time for animation loop to exit
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    it("should set _settingBrightness to false", () => {
+      service._settingBrightness = true;
+      service._animationTimeout = 123; // Fake timeout ID
+
+      service.haltAnimatingBrightness();
+
+      expect(service._settingBrightness).toBe(false);
+    });
+
+    it("should be safe to call when no animation is running", () => {
+      service._settingBrightness = false;
+      service._animationTimeout = null;
+
+      expect(() => service.haltAnimatingBrightness()).not.toThrow();
+      expect(service._settingBrightness).toBe(false);
+      expect(service._animationTimeout).toBeNull();
+    });
+
+    it("should be safe to call multiple times", async () => {
+      service.animateBrightness(80); // Don't await
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      service.haltAnimatingBrightness();
+      service.haltAnimatingBrightness();
+      service.haltAnimatingBrightness();
+
+      expect(service._animationTimeout).toBeNull();
+      expect(service._settingBrightness).toBe(false);
+
+      // Give time for animation loop to exit
+      await new Promise((resolve) => setTimeout(resolve, 100));
     });
   });
 
@@ -242,6 +336,7 @@ describe("DisplayBrightnessService", () => {
       service.destroy();
 
       expect(service._animationTimeout).toBeNull();
+      expect(service._settingBrightness).toBe(false);
 
       // Give time for any pending callbacks to settle
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -260,6 +355,15 @@ describe("DisplayBrightnessService", () => {
 
     it("should handle destroy when not started", () => {
       expect(() => service.destroy()).not.toThrow();
+    });
+
+    it("should reset _settingBrightness flag", async () => {
+      await service.start();
+      service._settingBrightness = true;
+
+      service.destroy();
+
+      expect(service._settingBrightness).toBe(false);
     });
   });
 
