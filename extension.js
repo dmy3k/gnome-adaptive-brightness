@@ -23,10 +23,13 @@ export default class AdaptiveBrightnessExtension extends Extension {
     this.ambientSignalId = null;
     this.brightnessSignalId = null;
     this.sleepResumeSignalId = null;
-    this.keyboardSettingSignalId = null;
+    this.biasRatioSignalId = null;
   }
 
   initializeServices() {
+    // Get extension settings first
+    this.settings = this.getSettings();
+
     this.notifications = new NotificationService();
     this.displayBrightness = new DisplayBrightnessService();
     this.keyboardBacklight = new KeyboardBacklightDbus();
@@ -38,10 +41,9 @@ export default class AdaptiveBrightnessExtension extends Extension {
     );
 
     this.loginManager = null;
-    this.userLearning = new UserPreferenceLearning();
-
-    // Get extension settings
-    this.settings = this.getSettings();
+    this.userLearning = new UserPreferenceLearning(
+      this.settings.get_double('brightness-bias-ratio')
+    );
   }
 
   async enable() {
@@ -94,6 +96,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
     this.handleDisplayStateUpdates();
     this.handleBrightnessChanges();
     this.handleLightLevelChanges();
+    this.handleBiasRatioChanges();
   }
 
   handleGnomeAmbientConflict() {
@@ -161,11 +164,14 @@ export default class AdaptiveBrightnessExtension extends Extension {
               label: 'Reset',
               callback: () => {
                 this.userLearning.reset();
+                this.settings.set_double('brightness-bias-ratio', 1.0);
                 this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel);
               },
             },
           }
         );
+        // Persist the learned bias ratio
+        this.settings.set_double('brightness-bias-ratio', updatedRatio);
       }
     }
   }
@@ -201,20 +207,37 @@ export default class AdaptiveBrightnessExtension extends Extension {
     );
   }
 
-  adjustBrightnessForLightLevel(luxValue) {
-    if (!this.displayBrightness.displayIsActive || luxValue === null) {
-      // When display becomes inactive (dimmed/off), turn off keyboard backlight
-      if (
-        this.keyboardBacklight.isAvailable &&
-        this.settings.get_boolean('auto-keyboard-backlight')
-      ) {
-        this.keyboardBacklight
-          .setBrightness(0)
-          .catch((e) =>
-            console.error('[AdaptiveBrightness] Error disabling keyboard brightness:', e)
-          );
+  handleBiasRatioChanges() {
+    this.biasRatioSignalId = this.settings.connect('changed::brightness-bias-ratio', () => {
+      const newBiasRatio = this.settings.get_double('brightness-bias-ratio');
+
+      // Only react if the value actually changed (avoid re-entry from our own updates)
+      if (Math.abs(newBiasRatio - this.userLearning.biasRatio) < 0.01) {
+        return;
       }
 
+      this.userLearning.setBiasRatio(newBiasRatio);
+
+      // Re-apply brightness with the new bias ratio
+      this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel);
+    });
+  }
+
+  adjustBrightnessForLightLevel(luxValue) {
+    if (
+      !this.displayBrightness.displayIsActive &&
+      this.keyboardBacklight.isAvailable &&
+      this.settings.get_boolean('auto-keyboard-backlight')
+    ) {
+      // When display becomes inactive (dimmed/off), turn off keyboard backlight
+      this.keyboardBacklight
+        .setBrightness(0)
+        .catch((e) =>
+          console.error('[AdaptiveBrightness] Error disabling keyboard brightness:', e)
+        );
+    }
+
+    if (!this.displayBrightness.displayIsActive || luxValue === null) {
       return;
     }
 
@@ -263,9 +286,9 @@ export default class AdaptiveBrightnessExtension extends Extension {
     }
     this.loginManager = null;
 
-    if (this.keyboardSettingSignalId) {
-      this.settings?.disconnect(this.keyboardSettingSignalId);
-      this.keyboardSettingSignalId = null;
+    if (this.biasRatioSignalId) {
+      this.settings?.disconnect(this.biasRatioSignalId);
+      this.biasRatioSignalId = null;
     }
 
     this.sensorProxy.destroy();
@@ -273,7 +296,6 @@ export default class AdaptiveBrightnessExtension extends Extension {
     this.keyboardBacklight.destroy();
     this.notifications.destroy();
 
-    this.userLearning.reset();
     this.settings = null;
   }
 }

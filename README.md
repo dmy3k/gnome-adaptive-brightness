@@ -1,8 +1,6 @@
 # Adaptive brightness
 
-GNOME Shell extension that automatically adjusts your screen brightness based on ambient light conditions, helping to reduce eye strain and save energy.
-
-ALS (ambient light sensor) is required for extesion to operate.
+GNOME Shell extension that automatically adjusts your screen brightness based on ambient light conditions, helping to reduce eye strain and save energy. It also includes an optional keyboard backlight service that runs automatically based on ambient light.
 
 # Background
 
@@ -27,3 +25,62 @@ git clone git@github.com:dmy3k/gnome-extension-adaptive-brightness.git && cd gno
 make install
 make enable
 ```
+
+# References
+
+- [Backlight](https://wiki.archlinux.org/title/Backlight)
+- [Keyboard backlight](https://wiki.archlinux.org/title/Keyboard_backlight)
+
+# Supported devices
+
+ALS (ambient light sensor) is required for extension to operate. Some examples of laptops supporting it:
+
+**HP:**
+
+- HP Elitebook 845 G9 (and newer)
+- HP Elitebook 840/850/860 G8-G11 series
+- HP Spectre x360 (2020 and newer)
+- HP Envy x360 (most recent models)
+- HP ZBook Studio/Fury/Power G8-G11 series
+- HP ProBook 440/450/460 G9-G11 series
+
+**Lenovo:**
+
+- Lenovo Yoga 7 Pro
+- Lenovo ThinkPad X1 Carbon (Gen 9 and newer)
+- Lenovo ThinkPad X1 Yoga (Gen 6 and newer)
+- Lenovo ThinkPad T14/T14s/T16 (Gen 2 and newer)
+- Lenovo ThinkPad P1 (Gen 4 and newer)
+- Lenovo ThinkPad X13 (Gen 2 and newer)
+- Lenovo IdeaPad Slim 7 Pro
+- Lenovo Legion 5/7 Pro (2021 and newer)
+
+**Dell:**
+
+- Dell XPS 13/15/17 (2020 and newer)
+- Dell Latitude 5000/7000/9000 series (2020 and newer)
+- Dell Precision 5000/7000 series (2020 and newer)
+- Dell Inspiron 14/16 Plus (2021 and newer)
+
+**Framework:**
+
+- Framework Laptop 13
+- Framework Laptop 16
+
+**ASUS:**
+
+- ASUS ZenBook 13/14/15 (2020 and newer)
+- ASUS VivoBook Pro 14/15/16 OLED
+- ASUS ProArt StudioBook
+
+**Acer:**
+
+- Acer Swift 3/5/7 (2020 and newer)
+- Acer TravelMate P2/P4/P6 (recent models)
+
+**System76:**
+
+- System76 Lemur Pro (lemp10 and newer)
+- System76 Oryx Pro (oryp8 and newer)
+
+**Note:** Keyboard backlight control availability may vary. Most laptops with ambient light sensors support automatic keyboard backlight adjustment, but this depends on proper driver support in the Linux kernel. Check `ls /sys/class/leds/` for keyboard backlight interfaces.

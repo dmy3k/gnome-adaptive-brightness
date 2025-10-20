@@ -1,12 +1,18 @@
 UUID = $(shell grep -oP '(?<="uuid": ")[^"]+' metadata.json)
 LIB_DIR = lib
 TESTS_DIR = tests
+SCHEMAS_DIR = schemas
 
-.PHONY: all build install uninstall enable disable test clean
+.PHONY: all build install uninstall enable disable test clean compile-schemas
 
 all: build
 
-build:
+compile-schemas:
+	@echo "Compiling GSettings schemas..."
+	@glib-compile-schemas $(SCHEMAS_DIR)/
+	@echo "Schemas compiled."
+
+build: compile-schemas
 	@echo "Building extension..."
 	@gnome-extensions pack --force --extra-source=$(LIB_DIR) .
 	@echo "Build complete: $(UUID).shell-extension.zip"
