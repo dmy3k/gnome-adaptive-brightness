@@ -6,7 +6,7 @@ import { DisplayBrightnessService } from './lib/DisplayBrightnessService.js';
 import { SensorProxyService } from './lib/SensorProxyService.js';
 import { UserPreferenceLearning } from './lib/UserPreferenceLearning.js';
 import { BucketMapper } from './lib/BucketMapper.js';
-import { KeyboardBacklightDbus } from './lib/KeyboardBacklightDbus.js';
+import { KeyboardBacklightService } from './lib/KeyboardBacklightService.js';
 
 const BRIGHTNESS_BUCKETS = [
   { min: 0, max: 20, brightness: 15 }, // Night
@@ -33,7 +33,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
 
     this.notifications = new NotificationService();
     this.displayBrightness = new DisplayBrightnessService();
-    this.keyboardBacklight = new KeyboardBacklightDbus();
+    this.keyboardBacklight = new KeyboardBacklightService(this.settings);
     this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
 
     // Pass bucket boundary filter to sensor service for efficient event filtering
@@ -62,16 +62,14 @@ export default class AdaptiveBrightnessExtension extends Extension {
       return;
     }
 
-    // Start keyboard backlight (non-fatal if it fails)
+    // Start keyboard backlight service (non-fatal if it fails)
     try {
-      await this.keyboardBacklight.connect();
-      if (this.keyboardBacklight.isAvailable) {
-        console.log(
-          `[AdaptiveBrightness] Keyboard backlight available (max: ${this.keyboardBacklight.maxBrightness})`
-        );
+      const kbAvailable = await this.keyboardBacklight.start();
+      if (kbAvailable) {
+        console.log('[AdaptiveBrightness] Keyboard backlight service initialized');
       }
     } catch (error) {
-      console.log('[AdaptiveBrightness] Keyboard backlight not available:', error);
+      console.log('[AdaptiveBrightness] Keyboard backlight service not available:', error);
     }
 
     try {
@@ -229,20 +227,11 @@ export default class AdaptiveBrightnessExtension extends Extension {
   }
 
   adjustBrightnessForLightLevel(luxValue) {
-    if (
-      !this.displayBrightness.displayIsActive &&
-      this.keyboardBacklight.isAvailable &&
-      this.settings.get_boolean('auto-keyboard-backlight')
-    ) {
-      // When display becomes inactive (dimmed/off), turn off keyboard backlight
-      this.keyboardBacklight
-        .setBrightness(0)
-        .catch((e) =>
-          console.error('[AdaptiveBrightness] Error disabling keyboard brightness:', e)
-        );
-    }
-
     if (!this.displayBrightness.displayIsActive || luxValue === null) {
+      // Display inactive - turn off keyboard backlight if needed
+      this.keyboardBacklight
+        .handleDisplayInactive()
+        .catch((e) => console.error('[AdaptiveBrightness] Error handling keyboard backlight:', e));
       return;
     }
 
@@ -254,23 +243,11 @@ export default class AdaptiveBrightnessExtension extends Extension {
         .animateBrightness(biasedBrightness)
         .catch((e) => console.error('[AdaptiveBrightness] Error animating brightness:', e));
 
-      // Control keyboard backlight based on brightness bucket index
-      // DBus module tracks state and only makes call if brightness changed
-      // Only control if auto-keyboard-backlight setting is enabled AND display is active
-      if (
-        this.keyboardBacklight.isAvailable &&
-        this.settings.get_boolean('auto-keyboard-backlight') &&
-        this.displayBrightness.displayIsActive
-      ) {
-        const isInLowestBucket = this.bucketMapper.currentBucketIndex === 0;
-        const keyboardLevel = isInLowestBucket ? 1 : 0;
-
-        this.keyboardBacklight
-          .setBrightness(keyboardLevel)
-          .catch((e) =>
-            console.error('[AdaptiveBrightness] Error setting keyboard brightness:', e)
-          );
-      }
+      // Update keyboard backlight based on current light level
+      const isInLowestBucket = this.bucketMapper.currentBucketIndex === 0;
+      this.keyboardBacklight
+        .updateForLightLevel(isInLowestBucket)
+        .catch((e) => console.error('[AdaptiveBrightness] Error updating keyboard backlight:', e));
     }
   }
 
@@ -298,7 +275,12 @@ export default class AdaptiveBrightnessExtension extends Extension {
 
     this.sensorProxy.destroy();
     this.displayBrightness.destroy();
-    this.keyboardBacklight.destroy();
+
+    // Clean up keyboard backlight service
+    if (this.keyboardBacklight) {
+      this.keyboardBacklight.destroy();
+    }
+
     this.notifications.destroy();
 
     this.settings = null;
