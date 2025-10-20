@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.adaptive-brightness" path="/org/gnome/shell/extensions/adaptive-brightness/">
+    <key name="auto-keyboard-backlight" type="b">
+      <default>true</default>
+      <summary>Automatically manage keyboard backlight</summary>
+      <description>
+        When enabled, the extension will automatically control the keyboard backlight
+        based on ambient light conditions. The keyboard backlight will be enabled in
+        low light conditions and disabled in brighter environments.
+      </description>
+    </key>
+  </schema>
+</schemalist>

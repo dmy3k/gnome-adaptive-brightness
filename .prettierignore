@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+*.zip
+*.shell-extension.zip
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Temp files
+*.log
+*.tmp
+.DS_Store
+
+# Git
+.git/
