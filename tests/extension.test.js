@@ -140,19 +140,21 @@ describe('AdaptiveBrightnessExtension', () => {
 
     const mockBucketMapperInstance = {
       getBrightness: jest.fn((lux) => {
-        if (lux <= 10) return 10;
+        if (lux <= 20) return 15;
         if (lux <= 200) return 25;
         if (lux <= 650) return 50;
         if (lux <= 2000) return 75;
-        return 100;
+        if (lux <= 7000) return 100;
+        return 150;
       }),
       mapLuxToBrightness: jest.fn((lux, withHysteresis = true) => {
         let brightness;
-        if (lux <= 10) brightness = 10;
+        if (lux <= 20) brightness = 15;
         else if (lux <= 200) brightness = 25;
         else if (lux <= 650) brightness = 50;
         else if (lux <= 2000) brightness = 75;
-        else brightness = 100;
+        else if (lux <= 7000) brightness = 100;
+        else brightness = 150;
 
         return { brightness };
       }),
@@ -161,15 +163,17 @@ describe('AdaptiveBrightnessExtension', () => {
         if (prev === null || curr === null) return true;
 
         const getBucket = (lux) => {
-          if (lux <= 10) return 0;
+          if (lux <= 20) return 0;
           if (lux <= 200) return 1;
           if (lux <= 650) return 2;
           if (lux <= 2000) return 3;
-          return 4;
+          if (lux <= 7000) return 4;
+          return 5;
         };
 
         return getBucket(prev) !== getBucket(curr);
       }),
+      currentBucketIndex: 0,
     };
 
     // Configure mock constructors to return mock instances
@@ -472,7 +476,7 @@ describe('AdaptiveBrightnessExtension', () => {
       mockSensorProxy.dbus.lightLevel = 0;
       mockDisplayBrightness.animateBrightness.mockClear();
       extension.loginManager._emitPrepareForSleep(false);
-      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(10);
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(15);
 
       // Test waking in bright conditions (5000 lux)
       mockDisplayBrightness.dbus.brightness = 50;
@@ -480,6 +484,13 @@ describe('AdaptiveBrightnessExtension', () => {
       mockDisplayBrightness.animateBrightness.mockClear();
       extension.loginManager._emitPrepareForSleep(false);
       expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(100);
+
+      // Test waking in very bright conditions (8000 lux)
+      mockDisplayBrightness.dbus.brightness = 50;
+      mockSensorProxy.dbus.lightLevel = 8000;
+      mockDisplayBrightness.animateBrightness.mockClear();
+      extension.loginManager._emitPrepareForSleep(false);
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(150);
     });
 
     it('should NOT adjust brightness when preparing for sleep', async () => {
@@ -533,11 +544,12 @@ describe('AdaptiveBrightnessExtension', () => {
     });
 
     it.each([
-      [5, 10, 'very dark (night)'],
+      [5, 15, 'very dark (night)'],
       [100, 25, 'dim indoor'],
       [300, 50, 'normal indoor'],
       [1000, 75, 'bright indoor'],
       [5000, 100, 'outdoor'],
+      [8000, 150, 'direct sunlight'],
     ])('should map %s lux to %s%% brightness (%s)', async (lux, expectedBrightness, condition) => {
       mockDisplayBrightness.dbus.brightness = 0; // Far from target to ensure update
       mockDisplayBrightness.animateBrightness.mockClear();

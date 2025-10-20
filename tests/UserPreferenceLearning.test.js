@@ -20,7 +20,7 @@ describe('UserPreferenceLearning', () => {
 
     it('should handle initial value edge cases', () => {
       expect(new UserPreferenceLearning(0.2).biasRatio).toBe(0.2);
-      expect(new UserPreferenceLearning(2.5).biasRatio).toBe(2.5);
+      expect(new UserPreferenceLearning(2.0).biasRatio).toBe(2.0);
       expect(new UserPreferenceLearning(3.0).biasRatio).toBe(3.0); // Not clamped in constructor
     });
   });
@@ -38,10 +38,10 @@ describe('UserPreferenceLearning', () => {
       expect(learning.biasRatio).toBe(0.2);
     });
 
-    it('should clamp bias to maximum (2.5)', () => {
+    it('should clamp bias to maximum (2.0)', () => {
       const result = learning.updateBiasFromManualAdjustment(100, 20);
-      expect(result).toBe(2.5);
-      expect(learning.biasRatio).toBe(2.5);
+      expect(result).toBe(2.0);
+      expect(learning.biasRatio).toBe(2.0);
     });
 
     it('should not update when automaticBrightness is 0', () => {
@@ -76,9 +76,9 @@ describe('UserPreferenceLearning', () => {
       expect(result).toBe(0.2);
     });
 
-    it('should clamp value above maximum to 2.5', () => {
+    it('should clamp value above maximum to 2.0', () => {
       const result = learning.smoothAndClampBias(3.0);
-      expect(result).toBe(2.5);
+      expect(result).toBe(2.0);
     });
 
     it('should handle minimum edge value', () => {
@@ -87,8 +87,8 @@ describe('UserPreferenceLearning', () => {
     });
 
     it('should handle maximum edge value', () => {
-      const result = learning.smoothAndClampBias(2.5);
-      expect(result).toBe(2.5);
+      const result = learning.smoothAndClampBias(2.0);
+      expect(result).toBe(2.0);
     });
 
     it('should handle zero', () => {
@@ -164,7 +164,7 @@ describe('UserPreferenceLearning', () => {
 
     it('should clamp values above maximum', () => {
       learning.setBiasRatio(3.0);
-      expect(learning.biasRatio).toBe(2.5);
+      expect(learning.biasRatio).toBe(2.0);
     });
   });
 
@@ -182,7 +182,7 @@ describe('UserPreferenceLearning', () => {
     });
 
     it('should reset from maximum bias', () => {
-      learning.biasRatio = 2.5;
+      learning.biasRatio = 2.0;
       learning.reset();
       expect(learning.biasRatio).toBe(1.0);
     });

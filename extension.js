@@ -9,11 +9,12 @@ import { BucketMapper } from './lib/BucketMapper.js';
 import { KeyboardBacklightDbus } from './lib/KeyboardBacklightDbus.js';
 
 const BRIGHTNESS_BUCKETS = [
-  { min: 0, max: 10, brightness: 10 }, // Night
+  { min: 0, max: 20, brightness: 15 }, // Night
   { min: 5, max: 200, brightness: 25 }, // Very dark to dim indoor
   { min: 50, max: 650, brightness: 50 }, // Dim to normal indoor
   { min: 350, max: 2000, brightness: 75 }, // Normal to bright indoor
-  { min: 1000, max: 10000, brightness: 100 }, // Bright indoor to outdoor
+  { min: 1000, max: 7000, brightness: 100 }, // Bright indoor to outdoor
+  { min: 5000, max: 10000, brightness: 150 }, // Direct sunlight
 ];
 
 export default class AdaptiveBrightnessExtension extends Extension {
@@ -97,6 +98,10 @@ export default class AdaptiveBrightnessExtension extends Extension {
     this.handleBrightnessChanges();
     this.handleLightLevelChanges();
     this.handleBiasRatioChanges();
+
+    // Force initial brightness adjustment based on current light level
+    // This ensures brightness is set correctly on extension startup
+    this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel);
   }
 
   handleGnomeAmbientConflict() {
