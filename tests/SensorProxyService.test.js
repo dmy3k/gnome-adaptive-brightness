@@ -1,16 +1,9 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  jest,
-} from "@jest/globals";
-import { SensorProxyService } from "../lib/SensorProxyService.js";
-import Gio from "gi://Gio";
-import GLib from "gi://GLib";
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { SensorProxyService } from '../lib/SensorProxyService.js';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 
-describe("SensorProxyService", () => {
+describe('SensorProxyService', () => {
   let service;
   let mockProxy;
 
@@ -28,18 +21,18 @@ describe("SensorProxyService", () => {
     GLib.clearAllTimeouts();
   });
 
-  describe("constructor", () => {
-    it("should initialize with null proxy and signal", () => {
+  describe('constructor', () => {
+    it('should initialize with null proxy and signal', () => {
       expect(service.dbus._proxy).toBeNull();
       expect(service._signalId).toBeNull();
     });
 
-    it("should initialize with no filter function by default", () => {
+    it('should initialize with no filter function by default', () => {
       expect(service._filterFn).toBeNull();
       expect(service._lastLuxValue).toBeNull();
     });
 
-    it("should accept filter function parameter", () => {
+    it('should accept filter function parameter', () => {
       const filterFn = (prev, curr) => prev !== curr;
       const serviceWithFilter = new SensorProxyService(filterFn);
 
@@ -49,18 +42,18 @@ describe("SensorProxyService", () => {
       serviceWithFilter.destroy();
     });
 
-    it("should initialize timeout tracking", () => {
+    it('should initialize timeout tracking', () => {
       expect(service._pendingTimeout).toBeNull();
       expect(service._lastUpdateTime).toBe(0);
       expect(service._throttleTimeoutMs).toBe(1000);
     });
 
-    it("should initialize light level and sensor availability", () => {
+    it('should initialize light level and sensor availability', () => {
       expect(service.dbus.lightLevel).toBeNull();
       expect(service.dbus.hasAmbientLight).toBeNull();
     });
 
-    it("should initialize callback managers", () => {
+    it('should initialize callback managers', () => {
       expect(service.onLightLevelChanged).toBeDefined();
       expect(service.onLightLevelChanged.size).toBe(0);
       expect(service.onSensorAvailableChanged).toBeDefined();
@@ -68,22 +61,22 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("start", () => {
-    it("should create DBusProxy connection", async () => {
+  describe('start', () => {
+    it('should create DBusProxy connection', async () => {
       await service.start();
 
       expect(service.dbus._proxy).not.toBeNull();
       expect(service._signalId).not.toBeNull();
     });
 
-    it("should connect to SensorProxy service", async () => {
+    it('should connect to SensorProxy service', async () => {
       await service.start();
 
-      expect(service.dbus._proxy._busName).toBe("net.hadess.SensorProxy");
-      expect(service.dbus._proxy._objectPath).toBe("/net/hadess/SensorProxy");
+      expect(service.dbus._proxy._busName).toBe('net.hadess.SensorProxy');
+      expect(service.dbus._proxy._objectPath).toBe('/net/hadess/SensorProxy');
     });
 
-    it("should claim light sensor", async () => {
+    it('should claim light sensor', async () => {
       await service.start();
 
       // Verify service is properly initialized
@@ -91,48 +84,32 @@ describe("SensorProxyService", () => {
       expect(service._signalId).not.toBeNull();
     });
 
-    it("should handle claim light error", async () => {
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
+    it('should handle claim light error', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      // Mock call to reject
-      const originalCall = Gio.DBusProxy.prototype.call;
-      Gio.DBusProxy.prototype.call = function (
-        method,
-        params,
-        flags,
-        timeout,
-        cancellable,
-        callback
-      ) {
-        process.nextTick(() => {
-          callback(
-            {
-              call_finish: () => {
-                throw new Error("ClaimLight failed");
-              },
-            },
-            { __asyncResult: true, __error: new Error("ClaimLight failed") }
-          );
-        });
-      };
+      // Spy on claimLight to make it reject
+      const testService = new SensorProxyService();
+      const originalClaimLight = testService.dbus.claimLight;
+      testService.dbus.claimLight = jest.fn().mockRejectedValue(new Error('ClaimLight failed'));
 
-      await expect(service.start()).rejects.toThrow("ClaimLight failed");
+      await expect(testService.start()).rejects.toThrow('ClaimLight failed');
 
-      Gio.DBusProxy.prototype.call = originalCall;
+      testService.dbus.claimLight = originalClaimLight;
+      testService.destroy();
       consoleErrorSpy.mockRestore();
     });
   });
 
-  describe("_onPropertiesChanged", () => {
+  describe('_onPropertiesChanged', () => {
     beforeEach(async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
     });
 
-    it("should handle LightLevel property change", () => {
+    it('should handle LightLevel property change', () => {
       const mockChanged = {
         lookup_value: (key) => {
-          if (key === "LightLevel") {
+          if (key === 'LightLevel') {
             return { get_double: () => 500 };
           }
           return null;
@@ -146,16 +123,16 @@ describe("SensorProxyService", () => {
       expect(service._lastUpdateTime).toBeGreaterThan(0);
     });
 
-    it("should handle HasAmbientLight property change", () => {
+    it('should handle HasAmbientLight property change', () => {
       const callback = jest.fn();
       service.onSensorAvailableChanged.add(callback);
 
       // Set the property on the mock proxy so the getter can read it
-      mockProxy.set_cached_property("HasAmbientLight", true);
+      mockProxy.set_cached_property('HasAmbientLight', true);
 
       const mockChanged = {
         lookup_value: (key) => {
-          if (key === "HasAmbientLight") {
+          if (key === 'HasAmbientLight') {
             return { get_boolean: () => true };
           }
           return null;
@@ -168,19 +145,19 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(true);
     });
 
-    it("should handle both properties changing", () => {
+    it('should handle both properties changing', () => {
       const callback = jest.fn();
       service.onSensorAvailableChanged.add(callback);
 
       // Set the property on the mock proxy so the getter can read it
-      mockProxy.set_cached_property("HasAmbientLight", false);
+      mockProxy.set_cached_property('HasAmbientLight', false);
 
       const mockChanged = {
         lookup_value: (key) => {
-          if (key === "LightLevel") {
+          if (key === 'LightLevel') {
             return { get_double: () => 300 };
           }
-          if (key === "HasAmbientLight") {
+          if (key === 'HasAmbientLight') {
             return { get_boolean: () => false };
           }
           return null;
@@ -194,16 +171,16 @@ describe("SensorProxyService", () => {
       expect(service._lastUpdateTime).toBeGreaterThan(0);
     });
 
-    it("should invoke callback even when value unchanged", () => {
+    it('should invoke callback even when value unchanged', () => {
       // Set initial value on the proxy
-      mockProxy.set_cached_property("HasAmbientLight", true);
+      mockProxy.set_cached_property('HasAmbientLight', true);
 
       const callback = jest.fn();
       service.onSensorAvailableChanged.add(callback);
 
       const mockChanged = {
         lookup_value: (key) => {
-          if (key === "HasAmbientLight") {
+          if (key === 'HasAmbientLight') {
             return { get_boolean: () => true };
           }
           return null;
@@ -217,24 +194,24 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("_handleLightLevelChange", () => {
+  describe('_handleLightLevelChange', () => {
     beforeEach(async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
     });
 
-    it("should process light level immediately if enough time passed", () => {
+    it('should process light level immediately if enough time passed', () => {
       service._lastUpdateTime = Date.now() - 3000; // 3 seconds ago
 
       // Set the property on the proxy before processing
-      mockProxy.set_cached_property("LightLevel", 400);
+      mockProxy.set_cached_property('LightLevel', 400);
 
       service._handleLightLevelChange(400);
 
       expect(service.dbus.lightLevel).toBe(400);
     });
 
-    it("should schedule delayed update if updated recently", () => {
+    it('should schedule delayed update if updated recently', () => {
       service._lastUpdateTime = Date.now() - 500; // 500ms ago
 
       service._handleLightLevelChange(400);
@@ -242,7 +219,7 @@ describe("SensorProxyService", () => {
       expect(service._pendingTimeout).not.toBeNull();
     });
 
-    it("should clear existing pending timeout when scheduling new one", () => {
+    it('should clear existing pending timeout when scheduling new one', () => {
       service._lastUpdateTime = Date.now() - 500;
 
       service._handleLightLevelChange(400);
@@ -255,22 +232,22 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("_processLightLevelUpdate", () => {
+  describe('_processLightLevelUpdate', () => {
     beforeEach(async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
     });
 
-    it("should update light level value", () => {
+    it('should update light level value', () => {
       // Set the property on the proxy before processing
-      mockProxy.set_cached_property("LightLevel", 250);
+      mockProxy.set_cached_property('LightLevel', 250);
 
       service._processLightLevelUpdate(250);
 
       expect(service.dbus.lightLevel).toBe(250);
     });
 
-    it("should invoke callback when value changes", () => {
+    it('should invoke callback when value changes', () => {
       const callback = jest.fn();
       service.onLightLevelChanged.add(callback);
 
@@ -279,9 +256,9 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(250);
     });
 
-    it("should invoke callback even when value unchanged", () => {
+    it('should invoke callback even when value unchanged', () => {
       // Set initial value on the proxy
-      mockProxy.set_cached_property("LightLevel", 250);
+      mockProxy.set_cached_property('LightLevel', 250);
 
       const callback = jest.fn();
       service.onLightLevelChanged.add(callback);
@@ -292,7 +269,7 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(250);
     });
 
-    it("should update last update time", async () => {
+    it('should update last update time', async () => {
       const before = Date.now();
 
       // Small delay to ensure time difference
@@ -304,8 +281,8 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("destroy", () => {
-    it("should clear pending timeout", async () => {
+  describe('destroy', () => {
+    it('should clear pending timeout', async () => {
       await service.start();
       service._lastUpdateTime = Date.now() - 500;
       service._handleLightLevelChange(400);
@@ -317,7 +294,7 @@ describe("SensorProxyService", () => {
       expect(service._pendingTimeout).toBeNull();
     });
 
-    it("should disconnect proxy signal", async () => {
+    it('should disconnect proxy signal', async () => {
       await service.start();
       const signalId = service._signalId;
 
@@ -328,7 +305,7 @@ describe("SensorProxyService", () => {
       expect(service._signalId).toBeNull();
     });
 
-    it("should release light sensor", async () => {
+    it('should release light sensor', async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
 
@@ -337,7 +314,7 @@ describe("SensorProxyService", () => {
       expect(service.dbus._proxy).toBeNull();
     });
 
-    it("should clear callbacks", async () => {
+    it('should clear callbacks', async () => {
       await service.start();
       const lightCallback = jest.fn();
       const sensorCallback = jest.fn();
@@ -351,18 +328,18 @@ describe("SensorProxyService", () => {
       expect(service.onSensorAvailableChanged.size).toBe(0);
     });
 
-    it("should handle destroy when not started", () => {
+    it('should handle destroy when not started', () => {
       expect(() => service.destroy()).not.toThrow();
     });
 
-    it("should handle multiple destroy calls", async () => {
+    it('should handle multiple destroy calls', async () => {
       await service.start();
       service.destroy();
       expect(() => service.destroy()).not.toThrow();
     });
   });
 
-  describe("filter function in _handleLightLevelChange", () => {
+  describe('filter function in _handleLightLevelChange', () => {
     let serviceWithFilter;
 
     beforeEach(async () => {
@@ -382,7 +359,7 @@ describe("SensorProxyService", () => {
       }
     });
 
-    it("should filter changes when filter function returns false", () => {
+    it('should filter changes when filter function returns false', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
@@ -400,7 +377,7 @@ describe("SensorProxyService", () => {
       expect(serviceWithFilter._lastLuxValue).toBe(450);
     });
 
-    it("should process changes when filter function returns true", () => {
+    it('should process changes when filter function returns true', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
@@ -415,7 +392,7 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(550);
     });
 
-    it("should bypass filtering when forceUpdate is true", () => {
+    it('should bypass filtering when forceUpdate is true', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
@@ -430,7 +407,7 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(450);
     });
 
-    it("should update lastLuxValue even when filtered", () => {
+    it('should update lastLuxValue even when filtered', () => {
       serviceWithFilter._lastLuxValue = 400;
       serviceWithFilter._lastUpdateTime = Date.now() - 3000;
 
@@ -440,7 +417,7 @@ describe("SensorProxyService", () => {
       expect(serviceWithFilter._lastLuxValue).toBe(420);
     });
 
-    it("should process first event after startup (lastLuxValue is null)", () => {
+    it('should process first event after startup (lastLuxValue is null)', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
@@ -454,7 +431,7 @@ describe("SensorProxyService", () => {
       expect(serviceWithFilter._lastLuxValue).toBe(400);
     });
 
-    it("should handle rapid fluctuations when filter rejects them", () => {
+    it('should handle rapid fluctuations when filter rejects them', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
@@ -474,7 +451,7 @@ describe("SensorProxyService", () => {
       expect(serviceWithFilter._lastLuxValue).toBe(450);
     });
 
-    it("should work with throttling and filtering together", () => {
+    it('should work with throttling and filtering together', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
@@ -490,7 +467,7 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("forceUpdate", () => {
+  describe('forceUpdate', () => {
     let serviceWithFilter;
 
     beforeEach(async () => {
@@ -510,11 +487,11 @@ describe("SensorProxyService", () => {
       }
     });
 
-    it("should force update even when filter would reject", () => {
+    it('should force update even when filter would reject', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
-      mockProxy.set_cached_property("LightLevel", 150);
+      mockProxy.set_cached_property('LightLevel', 150);
       serviceWithFilter._lastLuxValue = 120;
       serviceWithFilter._lastUpdateTime = Date.now() - 3000;
 
@@ -525,11 +502,11 @@ describe("SensorProxyService", () => {
       expect(callback).toHaveBeenCalledWith(150);
     });
 
-    it("should handle null lightLevel gracefully", () => {
+    it('should handle null lightLevel gracefully', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
-      mockProxy.set_cached_property("LightLevel", null);
+      mockProxy.set_cached_property('LightLevel', null);
 
       serviceWithFilter.forceUpdate();
 
@@ -537,8 +514,8 @@ describe("SensorProxyService", () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it("should update lastLuxValue", () => {
-      mockProxy.set_cached_property("LightLevel", 300);
+    it('should update lastLuxValue', () => {
+      mockProxy.set_cached_property('LightLevel', 300);
       serviceWithFilter._lastLuxValue = 100;
       serviceWithFilter._lastUpdateTime = Date.now() - 3000;
 
@@ -547,17 +524,17 @@ describe("SensorProxyService", () => {
       expect(serviceWithFilter._lastLuxValue).toBe(300);
     });
 
-    it("should work for use case: sleep/resume", () => {
+    it('should work for use case: sleep/resume', () => {
       const callback = jest.fn();
       serviceWithFilter.onLightLevelChanged.add(callback);
 
       // Before sleep: indoor lighting
-      mockProxy.set_cached_property("LightLevel", 400);
+      mockProxy.set_cached_property('LightLevel', 400);
       serviceWithFilter._lastLuxValue = 400;
       serviceWithFilter._lastUpdateTime = Date.now() - 3000;
 
       // After resume: outdoor lighting (significant change)
-      mockProxy.set_cached_property("LightLevel", 5000);
+      mockProxy.set_cached_property('LightLevel', 5000);
 
       serviceWithFilter.forceUpdate();
 
@@ -566,8 +543,8 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("destroy", () => {
-    it("should clear pending timeout", async () => {
+  describe('destroy', () => {
+    it('should clear pending timeout', async () => {
       await service.start();
       service._lastUpdateTime = Date.now() - 500;
       service._handleLightLevelChange(400);
@@ -579,7 +556,7 @@ describe("SensorProxyService", () => {
       expect(service._pendingTimeout).toBeNull();
     });
 
-    it("should disconnect proxy signal", async () => {
+    it('should disconnect proxy signal', async () => {
       await service.start();
       const signalId = service._signalId;
 
@@ -590,7 +567,7 @@ describe("SensorProxyService", () => {
       expect(service._signalId).toBeNull();
     });
 
-    it("should release light sensor", async () => {
+    it('should release light sensor', async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
 
@@ -599,7 +576,7 @@ describe("SensorProxyService", () => {
       expect(service.dbus._proxy).toBeNull();
     });
 
-    it("should clear callbacks", async () => {
+    it('should clear callbacks', async () => {
       await service.start();
       const lightCallback = jest.fn();
       const sensorCallback = jest.fn();
@@ -613,28 +590,28 @@ describe("SensorProxyService", () => {
       expect(service.onSensorAvailableChanged.size).toBe(0);
     });
 
-    it("should handle destroy when not started", () => {
+    it('should handle destroy when not started', () => {
       expect(() => service.destroy()).not.toThrow();
     });
 
-    it("should handle multiple destroy calls", async () => {
+    it('should handle multiple destroy calls', async () => {
       await service.start();
       service.destroy();
       expect(() => service.destroy()).not.toThrow();
     });
   });
 
-  describe("integration scenarios", () => {
+  describe('integration scenarios', () => {
     beforeEach(async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
     });
 
-    it("should handle rapid light level changes with throttling", () => {
+    it('should handle rapid light level changes with throttling', () => {
       service._lastUpdateTime = 0;
 
       // Set properties on the proxy so getter can read them
-      mockProxy.set_cached_property("LightLevel", 100);
+      mockProxy.set_cached_property('LightLevel', 100);
 
       // First change - immediate
       service._handleLightLevelChange(100);
@@ -646,15 +623,15 @@ describe("SensorProxyService", () => {
       expect(service._pendingTimeout).not.toBeNull();
     });
 
-    it("should handle complete sensor lifecycle", async () => {
+    it('should handle complete sensor lifecycle', async () => {
       const sensorCallback = jest.fn();
       service.onSensorAvailableChanged.add(sensorCallback);
 
       // Sensor becomes available
-      mockProxy.set_cached_property("HasAmbientLight", true);
+      mockProxy.set_cached_property('HasAmbientLight', true);
       const mockChanged = {
         lookup_value: (key) => {
-          if (key === "HasAmbientLight") {
+          if (key === 'HasAmbientLight') {
             return { get_boolean: () => true };
           }
           return null;
@@ -665,7 +642,7 @@ describe("SensorProxyService", () => {
       expect(sensorCallback).toHaveBeenCalledWith(true);
 
       // Light level updates
-      mockProxy.set_cached_property("LightLevel", 500);
+      mockProxy.set_cached_property('LightLevel', 500);
       service._processLightLevelUpdate(500);
       expect(service.dbus.lightLevel).toBe(500);
 
@@ -675,50 +652,50 @@ describe("SensorProxyService", () => {
     });
   });
 
-  describe("callback API", () => {
+  describe('callback API', () => {
     beforeEach(async () => {
       await service.start();
       mockProxy = service.dbus._proxy;
     });
 
-    it("should register light level callback", () => {
+    it('should register light level callback', () => {
       const callback = jest.fn();
       const id = service.onLightLevelChanged.add(callback);
       expect(id).toBeGreaterThan(0);
       expect(service.onLightLevelChanged.size).toBe(1);
     });
 
-    it("should register sensor available callback", () => {
+    it('should register sensor available callback', () => {
       const callback = jest.fn();
       const id = service.onSensorAvailableChanged.add(callback);
       expect(id).toBeGreaterThan(0);
       expect(service.onSensorAvailableChanged.size).toBe(1);
     });
 
-    it("should provide light level via dbus layer", async () => {
+    it('should provide light level via dbus layer', async () => {
       await service.start();
-      service.dbus._proxy.set_cached_property("LightLevel", 123);
+      service.dbus._proxy.set_cached_property('LightLevel', 123);
       expect(service.dbus.lightLevel).toBe(123);
     });
 
-    it("should provide sensor availability via dbus layer", async () => {
+    it('should provide sensor availability via dbus layer', async () => {
       await service.start();
-      service.dbus._proxy.set_cached_property("HasAmbientLight", true);
+      service.dbus._proxy.set_cached_property('HasAmbientLight', true);
       expect(service.dbus.hasAmbientLight).toBe(true);
     });
 
-    it("should handle callback errors gracefully", async () => {
+    it('should handle callback errors gracefully', async () => {
       await service.start();
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       const callback = jest.fn(() => {
-        throw new Error("Callback error");
+        throw new Error('Callback error');
       });
 
       service.onLightLevelChanged.add(callback);
       service._processLightLevelUpdate(100);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("CallbackManager"),
+        expect.stringContaining('CallbackManager'),
         expect.any(Error)
       );
 
