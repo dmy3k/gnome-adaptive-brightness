@@ -1,12 +1,13 @@
 /**
  * Mock for GNOME Shell Extension base class
  */
+import { jest } from '@jest/globals';
 
 export class Extension {
   constructor(metadata = {}) {
     this.metadata = metadata;
-    this.path = metadata.path || "/test/path";
-    this.uuid = metadata.uuid || "test-extension@test.com";
+    this.path = metadata.path || '/test/path';
+    this.uuid = metadata.uuid || 'test-extension@test.com';
     this.dir = {
       get_path: () => this.path,
     };
@@ -20,7 +21,9 @@ export class Extension {
       set_int: jest.fn(),
       get_boolean: jest.fn(),
       set_boolean: jest.fn(),
-      connect: jest.fn(),
+      get_double: jest.fn().mockReturnValue(1.0),
+      set_double: jest.fn(),
+      connect: jest.fn().mockReturnValue(123),
       disconnect: jest.fn(),
     };
   }

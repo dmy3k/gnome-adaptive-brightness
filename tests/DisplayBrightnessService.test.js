@@ -1,16 +1,9 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  jest,
-} from "@jest/globals";
-import { DisplayBrightnessService } from "../lib/DisplayBrightnessService.js";
-import Gio from "gi://Gio";
-import GLib from "gi://GLib";
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { DisplayBrightnessService } from '../lib/DisplayBrightnessService.js';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 
-describe("DisplayBrightnessService", () => {
+describe('DisplayBrightnessService', () => {
   let service;
 
   beforeEach(() => {
@@ -24,13 +17,13 @@ describe("DisplayBrightnessService", () => {
     GLib.clearAllTimeouts();
   });
 
-  describe("constructor", () => {
-    it("should initialize with BrightnessDbus instance", () => {
+  describe('constructor', () => {
+    it('should initialize with BrightnessDbus instance', () => {
       expect(service.dbus).toBeDefined();
       expect(service.settings._settings).toBeDefined();
     });
 
-    it("should initialize callback managers", () => {
+    it('should initialize callback managers', () => {
       expect(service.onManualBrightnessChange).toBeDefined();
       expect(service.onManualBrightnessChange.size).toBe(0);
       expect(service.onDisplayIsActiveChanged).toBeDefined();
@@ -38,14 +31,14 @@ describe("DisplayBrightnessService", () => {
       expect(service.displayIsActive).toBe(true);
     });
 
-    it("should initialize display state properties", () => {
+    it('should initialize display state properties', () => {
       expect(service.displayIsDimmed).toBe(false);
       expect(service.displayIsOff).toBe(false);
     });
   });
 
-  describe("start", () => {
-    it("should initialize settings and connect to brightness D-Bus", async () => {
+  describe('start', () => {
+    it('should initialize settings and connect to brightness D-Bus', async () => {
       await service.start();
 
       expect(service.settings._settings).not.toBeNull();
@@ -53,64 +46,68 @@ describe("DisplayBrightnessService", () => {
       expect(service._ambientEnabledSignalId).not.toBeNull();
     });
 
-    it("should read initial power settings", async () => {
+    it('should read initial power settings', async () => {
       await service.start();
 
       expect(service.settings.idleBrightness).toBe(30);
       expect(service.settings.ambientEnabled).toBe(false);
     });
 
-    it("should monitor settings changes", async () => {
+    it('should monitor settings changes', async () => {
       await service.start();
 
-      service.settings._settings.set_int("idle-brightness", 50);
+      service.settings._settings.set_int('idle-brightness', 50);
       expect(service.settings.idleBrightness).toBe(50);
     });
 
-    it("should read initial brightness value", async () => {
+    it('should read initial brightness value', async () => {
       await service.start();
 
       expect(service.dbus.brightness).toBeDefined();
     });
   });
 
-  describe("power settings changes", () => {
+  describe('power settings changes', () => {
     beforeEach(async () => {
       await service.start();
     });
 
-    it("should update idleBrightness when setting changes", () => {
-      service.settings._settings.set_int("idle-brightness", 40);
+    it('should update idleBrightness when setting changes', () => {
+      service.settings._settings.set_int('idle-brightness', 40);
       expect(service.settings.idleBrightness).toBe(40);
     });
 
-    it("should update ambientEnabled when setting changes", () => {
-      service.settings._settings.set_boolean("ambient-enabled", true);
+    it('should update ambientEnabled when setting changes', () => {
+      service.settings._settings.set_boolean('ambient-enabled', true);
       expect(service.settings.ambientEnabled).toBe(true);
     });
 
-    it("should set displayIsActive to false when ambient-enabled becomes true", () => {
-      service.settings._settings.set_boolean("ambient-enabled", true);
+    it('should set displayIsActive to false when ambient-enabled becomes true', () => {
+      service.settings._settings.set_boolean('ambient-enabled', true);
       expect(service.displayIsActive).toBe(false);
     });
 
-    it("should restore displayIsActive when ambient-enabled becomes false", () => {
-      service.settings._settings.set_boolean("ambient-enabled", true);
+    it('should restore displayIsActive when ambient-enabled becomes false', () => {
+      service.settings._settings.set_boolean('ambient-enabled', true);
       expect(service.displayIsActive).toBe(false);
 
-      service.settings._settings.set_boolean("ambient-enabled", false);
+      service.settings._settings.set_boolean('ambient-enabled', false);
       expect(service.displayIsActive).toBe(true);
     });
   });
 
-  describe("brightness change detection", () => {
+  describe('brightness change detection', () => {
     beforeEach(async () => {
       await service.start();
       // Simulate a brightness change via the D-Bus service
-      service.dbus._proxy.set_cached_property("Brightness", 50);
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 50,
+        writable: true,
+        configurable: true,
+      });
     });
 
-    it("should detect manual brightness changes", () => {
+    it('should detect manual brightness changes', () => {
       const callback = jest.fn();
       service.onManualBrightnessChange.add(callback);
 
@@ -119,7 +116,7 @@ describe("DisplayBrightnessService", () => {
       expect(callback).toHaveBeenCalledWith(70);
     });
 
-    it("should not detect automatic brightness changes as manual", () => {
+    it('should not detect automatic brightness changes as manual', () => {
       const callback = jest.fn();
       service.onManualBrightnessChange.add(callback);
       service._settingBrightness = true;
@@ -129,11 +126,11 @@ describe("DisplayBrightnessService", () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it("should not detect changes when display is inactive", () => {
+    it('should not detect changes when display is inactive', () => {
       const callback = jest.fn();
       service.onManualBrightnessChange.add(callback);
       // Set ambient-enabled to keep display inactive even after brightness change
-      service.settings._settings.set_boolean("ambient-enabled", true);
+      service.settings._settings.set_boolean('ambient-enabled', true);
       expect(service.displayIsActive).toBe(false);
 
       service._onBrightnessChanged(70);
@@ -142,26 +139,30 @@ describe("DisplayBrightnessService", () => {
     });
   });
 
-  describe("display state tracking", () => {
+  describe('display state tracking', () => {
     beforeEach(async () => {
       await service.start();
-      service.dbus._proxy.set_cached_property("Brightness", 50);
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 50,
+        writable: true,
+        configurable: true,
+      });
     });
 
-    it("should detect off state when brightness < 0", () => {
+    it('should detect off state when brightness < 0', () => {
       service._onBrightnessChanged(-1);
       expect(service.displayIsOff).toBe(true);
       expect(service.displayIsDimmed).toBe(false);
     });
 
-    it("should detect dimmed state when brightness equals idle brightness", () => {
-      service.settings._settings.set_int("idle-brightness", 30);
+    it('should detect dimmed state when brightness equals idle brightness', () => {
+      service.settings._settings.set_int('idle-brightness', 30);
       service._onBrightnessChanged(30);
       expect(service.displayIsDimmed).toBe(true);
       expect(service.displayIsOff).toBe(false);
     });
 
-    it("should delay active state when transitioning from off", () => {
+    it('should delay active state when transitioning from off', () => {
       service._onBrightnessChanged(-1);
       expect(service.displayIsOff).toBe(true);
 
@@ -175,20 +176,25 @@ describe("DisplayBrightnessService", () => {
       });
     });
 
-    it("should set inactive immediately when transitioning to dimmed", () => {
-      service.settings._settings.set_int("idle-brightness", 30);
+    it('should set inactive immediately when transitioning to dimmed', () => {
+      service.settings._settings.set_int('idle-brightness', 30);
       service._onBrightnessChanged(30);
       expect(service.displayIsActive).toBe(false);
     });
   });
 
-  describe("animateBrightness", () => {
+  describe('animateBrightness', () => {
     beforeEach(async () => {
       await service.start();
-      service.dbus._proxy.set_cached_property("Brightness", 50);
+      // Set up Brightness property using Object.defineProperty
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 50,
+        writable: true,
+        configurable: true,
+      });
     });
 
-    it("should animate brightness using generator-based animator", async () => {
+    it('should animate brightness using generator-based animator', async () => {
       const animationPromise = service.animateBrightness(60);
 
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -200,7 +206,7 @@ describe("DisplayBrightnessService", () => {
       await animationPromise;
     });
 
-    it("should stop animation when display becomes inactive", async () => {
+    it('should stop animation when display becomes inactive', async () => {
       const animationPromise = service.animateBrightness(80);
 
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -214,7 +220,7 @@ describe("DisplayBrightnessService", () => {
       expect(service._animationTimeout).toBeNull();
     });
 
-    it("should stop animation when _settingBrightness is set to false", async () => {
+    it('should stop animation when _settingBrightness is set to false', async () => {
       service.animateBrightness(80); // Don't await
 
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -230,7 +236,7 @@ describe("DisplayBrightnessService", () => {
       expect(service._settingBrightness).toBe(false);
     });
 
-    it("should cancel previous animation when starting new one", async () => {
+    it('should cancel previous animation when starting new one', async () => {
       const firstAnimation = service.animateBrightness(80);
 
       await new Promise((resolve) => setTimeout(resolve, 30));
@@ -243,8 +249,8 @@ describe("DisplayBrightnessService", () => {
       expect(service._animationTimeout).toBeNull();
     });
 
-    it("should call haltAnimatingBrightness before starting new animation", async () => {
-      const haltSpy = jest.spyOn(service, "haltAnimatingBrightness");
+    it('should call haltAnimatingBrightness before starting new animation', async () => {
+      const haltSpy = jest.spyOn(service, 'haltAnimatingBrightness');
 
       await service.animateBrightness(60);
 
@@ -254,9 +260,13 @@ describe("DisplayBrightnessService", () => {
       haltSpy.mockRestore();
     });
 
-    it("should skip idle brightness values during animation", async () => {
-      service.settings._settings.set_int("idle-brightness", 55);
-      service.dbus._proxy.set_cached_property("Brightness", 50);
+    it('should skip idle brightness values during animation', async () => {
+      service.settings._settings.set_int('idle-brightness', 55);
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 50,
+        writable: true,
+        configurable: true,
+      });
 
       // Animate through the idle brightness value
       await service.animateBrightness(60);
@@ -267,13 +277,17 @@ describe("DisplayBrightnessService", () => {
     });
   });
 
-  describe("haltAnimatingBrightness", () => {
+  describe('haltAnimatingBrightness', () => {
     beforeEach(async () => {
       await service.start();
-      service.dbus._proxy.set_cached_property("Brightness", 50);
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 50,
+        writable: true,
+        configurable: true,
+      });
     });
 
-    it("should clear animation timeout", async () => {
+    it('should clear animation timeout', async () => {
       service.animateBrightness(80); // Don't await
 
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -287,7 +301,7 @@ describe("DisplayBrightnessService", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
 
-    it("should set _settingBrightness to false", () => {
+    it('should set _settingBrightness to false', () => {
       service._settingBrightness = true;
       service._animationTimeout = 123; // Fake timeout ID
 
@@ -296,7 +310,7 @@ describe("DisplayBrightnessService", () => {
       expect(service._settingBrightness).toBe(false);
     });
 
-    it("should be safe to call when no animation is running", () => {
+    it('should be safe to call when no animation is running', () => {
       service._settingBrightness = false;
       service._animationTimeout = null;
 
@@ -305,7 +319,7 @@ describe("DisplayBrightnessService", () => {
       expect(service._animationTimeout).toBeNull();
     });
 
-    it("should be safe to call multiple times", async () => {
+    it('should be safe to call multiple times', async () => {
       service.animateBrightness(80); // Don't await
 
       await new Promise((resolve) => setTimeout(resolve, 30));
@@ -322,10 +336,14 @@ describe("DisplayBrightnessService", () => {
     });
   });
 
-  describe("destroy", () => {
-    it("should cancel ongoing animation", async () => {
+  describe('destroy', () => {
+    it('should cancel ongoing animation', async () => {
       await service.start();
-      service.dbus._proxy.set_cached_property("Brightness", 10);
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 10,
+        writable: true,
+        configurable: true,
+      });
 
       // Start a long animation (10->90 = 80 steps) - don't await it
       service.animateBrightness(90);
@@ -342,7 +360,7 @@ describe("DisplayBrightnessService", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
 
-    it("should disconnect settings signal", async () => {
+    it('should disconnect settings signal', async () => {
       await service.start();
       const signalId = service._ambientEnabledSignalId;
       expect(signalId).not.toBeNull();
@@ -353,11 +371,11 @@ describe("DisplayBrightnessService", () => {
       expect(service.settings._settings).toBeNull();
     });
 
-    it("should handle destroy when not started", () => {
+    it('should handle destroy when not started', () => {
       expect(() => service.destroy()).not.toThrow();
     });
 
-    it("should reset _settingBrightness flag", async () => {
+    it('should reset _settingBrightness flag', async () => {
       await service.start();
       service._settingBrightness = true;
 
@@ -367,19 +385,23 @@ describe("DisplayBrightnessService", () => {
     });
   });
 
-  describe("integration scenarios", () => {
+  describe('integration scenarios', () => {
     beforeEach(async () => {
       await service.start();
     });
 
-    it("should handle complete brightness cycle", async () => {
-      service.dbus._proxy.set_cached_property("Brightness", 50);
+    it('should handle complete brightness cycle', async () => {
+      Object.defineProperty(service.dbus._proxy, 'Brightness', {
+        value: 50,
+        writable: true,
+        configurable: true,
+      });
       service._onBrightnessChanged(50);
 
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(service.displayIsActive).toBe(true);
 
-      service.settings._settings.set_int("idle-brightness", 30);
+      service.settings._settings.set_int('idle-brightness', 30);
       service._onBrightnessChanged(30);
       expect(service.displayIsDimmed).toBe(true);
       expect(service.displayIsActive).toBe(false);
@@ -394,7 +416,7 @@ describe("DisplayBrightnessService", () => {
       expect(service.displayIsDimmed).toBe(false);
     });
 
-    it("should handle manual brightness changes during animation", async () => {
+    it('should handle manual brightness changes during animation', async () => {
       const callback = jest.fn();
       service.onManualBrightnessChange.add(callback);
 
