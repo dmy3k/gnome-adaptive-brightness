@@ -59,6 +59,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
         `Failed to start Display Brightness Service: ${error.message || error}`,
         { transient: false }
       );
+      this.disable();
       return;
     }
 
@@ -81,6 +82,8 @@ export default class AdaptiveBrightnessExtension extends Extension {
         `Failed to start Sensor Proxy Service: ${error.message || error}`,
         { transient: false }
       );
+      // Clean up already-started services before returning
+      this.disable();
       return;
     }
 
@@ -273,15 +276,22 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.biasRatioSignalId = null;
     }
 
-    this.sensorProxy.destroy();
-    this.displayBrightness.destroy();
+    if (this.sensorProxy) {
+      this.sensorProxy.destroy();
+    }
+
+    if (this.displayBrightness) {
+      this.displayBrightness.destroy();
+    }
 
     // Clean up keyboard backlight service
     if (this.keyboardBacklight) {
       this.keyboardBacklight.destroy();
     }
 
-    this.notifications.destroy();
+    if (this.notifications) {
+      this.notifications.destroy();
+    }
 
     this.settings = null;
   }
