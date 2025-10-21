@@ -32,6 +32,8 @@ describe('KeyboardBacklightService', () => {
     // Mock settings
     mockSettings = {
       get_boolean: jest.fn().mockReturnValue(true), // auto-keyboard-backlight enabled
+      connect: jest.fn().mockReturnValue(1), // Return signal ID
+      disconnect: jest.fn(),
     };
 
     // Mock D-Bus
@@ -106,7 +108,7 @@ describe('KeyboardBacklightService', () => {
       // Wait for async operations
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(mockIdleMonitor.addIdleWatch).toHaveBeenCalledWith(20000, expect.any(Function));
+      expect(mockIdleMonitor.addIdleWatch).toHaveBeenCalledWith(10000, expect.any(Function));
     });
 
     it('should disable backlight and remove watches in bright light', async () => {
@@ -187,16 +189,16 @@ describe('KeyboardBacklightService', () => {
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(0);
     });
 
-    it('should add active watch after going idle', async () => {
+    it('should not manually manage watches (IdleMonitorDbus handles cycling)', async () => {
       mockDbus.isEnabled = true;
 
       // Simulate user going idle
       await idleCallback(true);
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Should have removed old watch and added active watch
-      expect(mockIdleMonitor.removeWatch).toHaveBeenCalled();
-      expect(mockIdleMonitor.addIdleWatch).toHaveBeenCalledWith(0, expect.any(Function));
+      // Service should NOT manually remove or add watches
+      // IdleMonitorDbus handles the idle/active watch cycling internally
+      expect(mockIdleMonitor.removeWatch).not.toHaveBeenCalled();
     });
 
     it('should not turn off backlight when idle if already disabled', async () => {
@@ -214,15 +216,11 @@ describe('KeyboardBacklightService', () => {
       await idleCallback(true);
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Capture the active callback (should be the second call to addIdleWatch)
-      const calls = mockIdleMonitor.addIdleWatch.mock.calls;
-      const activeCallback = calls[calls.length - 1][1];
-
       jest.clearAllMocks();
       mockDbus.isEnabled = false; // Backlight is now off
 
-      // User becomes active (not idle)
-      await activeCallback(false);
+      // User becomes active (IdleMonitorDbus calls callback with false)
+      await idleCallback(false);
       await new Promise((resolve) => setImmediate(resolve));
 
       // Should re-enable backlight
@@ -236,21 +234,17 @@ describe('KeyboardBacklightService', () => {
       await idleCallback(true);
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Capture the active callback before light changes
-      const calls = mockIdleMonitor.addIdleWatch.mock.calls;
-      const activeCallback = calls[calls.length - 1][1];
-
-      // Light increases while user is idle
+      // Light increases while user is idle (calls updateForLightLevel with false)
       await service.updateForLightLevel(false);
 
       jest.clearAllMocks();
       mockDbus.isEnabled = false;
 
-      // User becomes active
-      await activeCallback(false);
+      // User becomes active (IdleMonitorDbus calls callback with false)
+      await idleCallback(false);
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Should NOT re-enable backlight
+      // Should NOT re-enable backlight because light increased
       expect(mockDbus.setBrightness).not.toHaveBeenCalled();
     });
   });
