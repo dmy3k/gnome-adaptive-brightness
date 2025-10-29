@@ -10,16 +10,6 @@
         low light conditions and disabled in brighter environments.
       </description>
     </key>
-    <key name="brightness-bias-ratio" type="d">
-      <default>1.0</default>
-      <range min="0.2" max="2.5"/>
-      <summary>Brightness bias ratio</summary>
-      <description>
-        Global multiplier applied to all automatic brightness levels. Values below 1.0
-        make the screen dimmer, values above 1.0 make it brighter. This value is learned
-        from manual brightness adjustments and can be manually overridden in preferences.
-      </description>
-    </key>
     <key name="keyboard-idle-timeout" type="u">
       <default>10</default>
       <range min="5" max="60"/>

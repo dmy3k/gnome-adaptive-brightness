@@ -24,7 +24,8 @@
       "^resource:///org/gnome/shell/ui/messageTray.js$": "<rootDir>/tests/__mocks__/MessageTray.js",
       "^resource:///org/gnome/shell/extensions/extension.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/extensions/extension.js",
       "^resource:///org/gnome/shell/misc/loginManager.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/misc/loginManager.js",
-      "^resource:///org/gnome/shell/misc/fileUtils.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/misc/fileUtils.js"
+      "^resource:///org/gnome/shell/misc/fileUtils.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/misc/fileUtils.js",
+      "^resource:///org/gnome/shell/misc/config.js$": "<rootDir>/tests/__mocks__/resource/org/gnome/shell/misc/config.js"
     }
   },
   "devDependencies": {
