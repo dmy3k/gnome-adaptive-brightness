@@ -11,9 +11,8 @@ This extension addresses some of the issues with custom implementation:
 
 - **Improved Algorithm**: More stable under often changing light conditions
 - **Smooth Transitions**: Gradually changes brightness to avoid jarring jumps
-- **Respects System States**: Better coexistence with brightness set by user and system states (display dim/off)
 - **Gamma Correction**: Uses perceptually uniform brightness adjustments (γ=2.2) that match human vision and display hardware
-- **Adaptive Learning**: Learns your brightness preferences and applies them consistently across all light levels
+- **Adaptive Learning**: Learns your brightness preferences and applies them across all light levels
 
 # Installation
 
@@ -30,7 +29,6 @@ Typically this is needed for testing and development. Clone the repo, pack and i
 ```bash
 git clone git@github.com:dmy3k/gnome-extension-adaptive-brightness.git
 cd gnome-extension-adaptive-brightness
-
 make install
 make enable
 ```

@@ -4,7 +4,7 @@
   "description": "Automatically adjusts screen brightness based on ambient light conditions to reduce eye strain and save energy. Acts as a replacement to 'Automatic Screen Brightness' found in GNOME settings. \n\nFeatures:\n• Smooth, gradual transitions that prevent flickering in changing light\n• Learns your brightness preferences and applies them consistently\n• Automatic keyboard backlight control in low-light conditions\n\nRequires Ambient Light Sensor (ALS) hardware support. Check the extension's home page for device compatibility",
   "shell-version": ["46", "47", "48", "49"],
   "url": "https://github.com/dmy3k/gnome-adaptive-brightness",
-  "version": 1,
+  "version": 7,
   "session-modes": ["user", "unlock-dialog"],
   "settings-schema": "org.gnome.shell.extensions.adaptive-brightness"
 }

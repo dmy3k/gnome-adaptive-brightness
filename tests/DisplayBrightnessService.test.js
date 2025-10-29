@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { DisplayBrightnessService } from '../lib/DisplayBrightnessService.js';
-import Gio from 'gi://Gio';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import GLib from 'gi://GLib';
 
 describe('DisplayBrightnessService', () => {
   let service;
 
   beforeEach(() => {
+    // Reset Main.brightnessManager to enabled state
+    Main.resetBrightnessManager(true);
     service = new DisplayBrightnessService();
   });
 
@@ -18,16 +20,16 @@ describe('DisplayBrightnessService', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with BrightnessDbus instance', () => {
-      expect(service.dbus).toBeDefined();
-      expect(service.settings._settings).toBeDefined();
+    it('should initialize with backend instance (BrightnessManager for GNOME 49)', () => {
+      expect(service.backend).toBeDefined();
+      expect(service._powerSettings).toBeDefined();
     });
 
     it('should initialize callback managers', () => {
-      expect(service.onManualBrightnessChange).toBeDefined();
-      expect(service.onManualBrightnessChange.size).toBe(0);
       expect(service.onDisplayIsActiveChanged).toBeDefined();
       expect(service.onDisplayIsActiveChanged.size).toBe(0);
+      expect(service.onAmbientEnabledChanged).toBeDefined();
+      expect(service.onAmbientEnabledChanged.size).toBe(0);
       expect(service.displayIsActive).toBe(true);
     });
 
@@ -38,147 +40,93 @@ describe('DisplayBrightnessService', () => {
   });
 
   describe('start', () => {
-    it('should initialize settings and connect to brightness D-Bus', async () => {
+    it('should connect to BrightnessManager and set up signals', async () => {
       await service.start();
 
-      expect(service.settings._settings).not.toBeNull();
-      expect(service._brightnessSignalId).not.toBeNull();
+      expect(service._powerSettings).not.toBeNull();
       expect(service._ambientEnabledSignalId).not.toBeNull();
     });
 
-    it('should read initial power settings', async () => {
+    it('should read initial ambient-enabled setting', async () => {
       await service.start();
 
-      expect(service.settings.idleBrightness).toBe(30);
-      expect(service.settings.ambientEnabled).toBe(false);
-    });
-
-    it('should monitor settings changes', async () => {
-      await service.start();
-
-      service.settings._settings.set_int('idle-brightness', 50);
-      expect(service.settings.idleBrightness).toBe(50);
+      expect(service.isGSDambientEnabled).toBe(false);
     });
 
     it('should read initial brightness value', async () => {
       await service.start();
 
-      expect(service.dbus.brightness).toBeDefined();
+      expect(service.backend.brightness).toBeDefined();
     });
   });
 
-  describe('power settings changes', () => {
+  describe('ambient-enabled setting changes', () => {
     beforeEach(async () => {
       await service.start();
     });
 
-    it('should update idleBrightness when setting changes', () => {
-      service.settings._settings.set_int('idle-brightness', 40);
-      expect(service.settings.idleBrightness).toBe(40);
+    it('should update isGSDambientEnabled when setting changes', () => {
+      service._powerSettings.set_boolean('ambient-enabled', true);
+      expect(service.isGSDambientEnabled).toBe(true);
     });
 
-    it('should update ambientEnabled when setting changes', () => {
-      service.settings._settings.set_boolean('ambient-enabled', true);
-      expect(service.settings.ambientEnabled).toBe(true);
-    });
-
-    it('should set displayIsActive to false when ambient-enabled becomes true', () => {
-      service.settings._settings.set_boolean('ambient-enabled', true);
-      expect(service.displayIsActive).toBe(false);
-    });
-
-    it('should restore displayIsActive when ambient-enabled becomes false', () => {
-      service.settings._settings.set_boolean('ambient-enabled', true);
-      expect(service.displayIsActive).toBe(false);
-
-      service.settings._settings.set_boolean('ambient-enabled', false);
+    it('should set displayIsActive to false when ambient-enabled becomes true', async () => {
       expect(service.displayIsActive).toBe(true);
-    });
-  });
 
-  describe('brightness change detection', () => {
-    beforeEach(async () => {
-      await service.start();
-      // Simulate a brightness change via the D-Bus service
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 50,
-        writable: true,
-        configurable: true,
-      });
+      service._powerSettings.set_boolean('ambient-enabled', true);
+
+      // Trigger brightness change to update display active state
+      service._onBrightnessChanged(0.6);
+
+      // Wait a tick for the signal to propagate
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(service.displayIsActive).toBe(false);
     });
 
-    it('should detect manual brightness changes', () => {
-      const callback = jest.fn();
-      service.onManualBrightnessChange.add(callback);
-
-      service._onBrightnessChanged(70);
-
-      expect(callback).toHaveBeenCalledWith(70);
-    });
-
-    it('should not detect automatic brightness changes as manual', () => {
-      const callback = jest.fn();
-      service.onManualBrightnessChange.add(callback);
-      service._settingBrightness = true;
-
-      service._onBrightnessChanged(70);
-
-      expect(callback).not.toHaveBeenCalled();
-    });
-
-    it('should not detect changes when display is inactive', () => {
-      const callback = jest.fn();
-      service.onManualBrightnessChange.add(callback);
-      // Set ambient-enabled to keep display inactive even after brightness change
-      service.settings._settings.set_boolean('ambient-enabled', true);
+    it('should restore displayIsActive when ambient-enabled becomes false', async () => {
+      service._powerSettings.set_boolean('ambient-enabled', true);
+      service._onBrightnessChanged(0.6);
+      await new Promise((resolve) => setTimeout(resolve, 10));
       expect(service.displayIsActive).toBe(false);
 
-      service._onBrightnessChanged(70);
-
-      expect(callback).not.toHaveBeenCalled();
+      service._powerSettings.set_boolean('ambient-enabled', false);
+      service._onBrightnessChanged(0.7);
+      // Need to wait for the 250ms delay when transitioning from inactive to active
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(service.displayIsActive).toBe(true);
     });
   });
 
   describe('display state tracking', () => {
     beforeEach(async () => {
       await service.start();
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 50,
-        writable: true,
-        configurable: true,
-      });
+      Main.brightnessManager.globalScale.value = 0.5;
     });
 
-    it('should detect off state when brightness < 0', () => {
-      service._onBrightnessChanged(-1);
+    it('should detect off state when display hardware is unavailable', () => {
+      // Simulate display being turned off (GNOME 49 behavior)
+      Main.brightnessManager.setDisplayOff(true);
+      service._onBrightnessChanged(null);
+
       expect(service.displayIsOff).toBe(true);
       expect(service.displayIsDimmed).toBe(false);
     });
 
-    it('should detect dimmed state when brightness equals idle brightness', () => {
-      service.settings._settings.set_int('idle-brightness', 30);
-      service._onBrightnessChanged(30);
+    it('should detect dimmed state via backend.isDimming', () => {
+      // Enable dimming in BrightnessManager
+      Main.brightnessManager.dimming = true;
+
+      // Trigger brightness change to update dimmed state
+      service._onBrightnessChanged(0.3);
+
       expect(service.displayIsDimmed).toBe(true);
       expect(service.displayIsOff).toBe(false);
     });
 
-    it('should delay active state when transitioning from off', () => {
-      service._onBrightnessChanged(-1);
-      expect(service.displayIsOff).toBe(true);
-
-      service._onBrightnessChanged(50);
-
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          expect(service.displayIsActive).toBe(true);
-          resolve();
-        }, 300); // Increased timeout to account for the 250ms delay
-      });
-    });
-
     it('should set inactive immediately when transitioning to dimmed', () => {
-      service.settings._settings.set_int('idle-brightness', 30);
-      service._onBrightnessChanged(30);
+      Main.brightnessManager.dimming = true;
+      service._onBrightnessChanged(0.3);
       expect(service.displayIsActive).toBe(false);
     });
   });
@@ -186,12 +134,8 @@ describe('DisplayBrightnessService', () => {
   describe('animateBrightness', () => {
     beforeEach(async () => {
       await service.start();
-      // Set up Brightness property using Object.defineProperty
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 50,
-        writable: true,
-        configurable: true,
-      });
+      // Set initial brightness via BrightnessManager
+      Main.brightnessManager.globalScale.value = 0.5;
     });
 
     it('should animate brightness using generator-based animator', async () => {
@@ -259,32 +203,12 @@ describe('DisplayBrightnessService', () => {
 
       haltSpy.mockRestore();
     });
-
-    it('should skip idle brightness values during animation', async () => {
-      service.settings._settings.set_int('idle-brightness', 55);
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 50,
-        writable: true,
-        configurable: true,
-      });
-
-      // Animate through the idle brightness value
-      await service.animateBrightness(60);
-
-      // The brightness should never be set to exactly idle-brightness (55)
-      // This is harder to test directly, but we can verify animation completes
-      expect(service._settingBrightness).toBe(false);
-    });
   });
 
   describe('haltAnimatingBrightness', () => {
     beforeEach(async () => {
       await service.start();
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 50,
-        writable: true,
-        configurable: true,
-      });
+      Main.brightnessManager.globalScale.value = 0.5;
     });
 
     it('should clear animation timeout', async () => {
@@ -339,11 +263,7 @@ describe('DisplayBrightnessService', () => {
   describe('destroy', () => {
     it('should cancel ongoing animation', async () => {
       await service.start();
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 10,
-        writable: true,
-        configurable: true,
-      });
+      Main.brightnessManager.globalScale.value = 0.1;
 
       // Start a long animation (10->90 = 80 steps) - don't await it
       service.animateBrightness(90);
@@ -367,8 +287,8 @@ describe('DisplayBrightnessService', () => {
 
       service.destroy();
 
-      // Signal should have been disconnected (can't easily verify in mock)
-      expect(service.settings._settings).toBeNull();
+      // Signal should have been disconnected and settings cleared
+      expect(service._powerSettings).toBeNull();
     });
 
     it('should handle destroy when not started', () => {
@@ -391,43 +311,31 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should handle complete brightness cycle', async () => {
-      Object.defineProperty(service.dbus._proxy, 'Brightness', {
-        value: 50,
-        writable: true,
-        configurable: true,
-      });
-      service._onBrightnessChanged(50);
+      Main.brightnessManager.globalScale.value = 0.5;
+      service._onBrightnessChanged(0.5);
 
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(service.displayIsActive).toBe(true);
 
-      service.settings._settings.set_int('idle-brightness', 30);
-      service._onBrightnessChanged(30);
+      // Simulate dimming
+      Main.brightnessManager.dimming = true;
+      service._onBrightnessChanged(0.3);
       expect(service.displayIsDimmed).toBe(true);
       expect(service.displayIsActive).toBe(false);
 
-      service._onBrightnessChanged(-1);
+      // Simulate display off (GNOME 49 behavior)
+      Main.brightnessManager.setDisplayOff(true);
+      service._onBrightnessChanged(null);
       expect(service.displayIsOff).toBe(true);
 
-      service._onBrightnessChanged(50);
+      // Display back on
+      Main.brightnessManager.setDisplayOff(false);
+      Main.brightnessManager.dimming = false;
+      service._onBrightnessChanged(0.5);
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(service.displayIsActive).toBe(true);
       expect(service.displayIsOff).toBe(false);
       expect(service.displayIsDimmed).toBe(false);
-    });
-
-    it('should handle manual brightness changes during animation', async () => {
-      const callback = jest.fn();
-      service.onManualBrightnessChange.add(callback);
-
-      const animationPromise = service.animateBrightness(80);
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      service._settingBrightness = false;
-      service._onBrightnessChanged(60);
-
-      expect(callback).toHaveBeenCalledWith(60);
     });
   });
 });
