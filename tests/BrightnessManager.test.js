@@ -119,8 +119,8 @@ describe('BrightnessManager', () => {
     it('should handle minimum brightness', () => {
       manager.brightness = 0.0;
 
-      expect(Main.brightnessManager.autoBrightnessTarget).toBe(0.0);
-      expect(manager.brightness).toBe(0.0);
+      expect(Main.brightnessManager.autoBrightnessTarget).toBe(0.01);
+      expect(manager.brightness).toBe(0.01);
     });
 
     it('should handle maximum brightness', () => {
@@ -135,7 +135,7 @@ describe('BrightnessManager', () => {
       expect(Main.brightnessManager.autoBrightnessTarget).toBe(1.0);
 
       manager.brightness = -0.5;
-      expect(Main.brightnessManager.autoBrightnessTarget).toBe(0.0);
+      expect(Main.brightnessManager.autoBrightnessTarget).toBe(0.01);
     });
   });
 

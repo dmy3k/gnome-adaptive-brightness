@@ -14,25 +14,25 @@ const BRIGHTNESS_BUCKETS = [
   { min: 50, max: 650, brightness: 0.5 }, // Dim to normal indoor
   { min: 350, max: 2000, brightness: 0.75 }, // Normal to bright indoor
   { min: 1000, max: 7000, brightness: 1.0 }, // Bright indoor to outdoor
-  { min: 5000, max: 10000, brightness: 1.5 }, // Direct sunlight
+  { min: 5000, max: 10000, brightness: 2.0 }, // Direct sunlight (allows to reach full brightness when brightness bias is < 1)
 ];
 
 export default class AdaptiveBrightnessExtension extends Extension {
-  async enable() {
+  enable() {
     this._osdBaselineBucketIdx = -1;
     this.settings = this.getSettings();
+
+    this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
+    this.userLearning = new UserPreferenceLearning();
 
     this.notifications = new NotificationService();
     this.displayBrightness = new DisplayBrightnessService();
     this.keyboardBacklight = new KeyboardBacklightService(this.settings);
-    this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
 
     // Pass bucket boundary filter to sensor service for efficient event filtering
     this.sensorProxy = new SensorProxyService(
       this.bucketMapper.crossesBucketBoundary.bind(this.bucketMapper)
     );
-
-    this.userLearning = new UserPreferenceLearning();
 
     // Set up sleep/resume handling using GNOME Shell's LoginManager
     // When resuming from sleep, check light level immediately
@@ -40,21 +40,25 @@ export default class AdaptiveBrightnessExtension extends Extension {
     // and might not receive ALS events (e.g., waking in darkness)
     this.loginManager = LoginManager.getLoginManager();
 
-    await Promise.all([
+    Promise.allSettled([
       this.displayBrightness.start(),
       this.keyboardBacklight.start(),
       this.sensorProxy.start(),
-    ]);
+    ]).then((results) => {
+      if (results.some((r) => r.status === 'rejected')) {
+        console.log('Some required services failed to start', results);
+        return;
+      }
+      this.handleSleepResumeEvents();
+      this.handleGnomeAmbientConflict();
+      this.handleDisplayStateUpdates();
+      this.handleLightLevelChanges();
+      this.handleBrightnessChanges();
 
-    this.handleSleepResumeEvents();
-    this.handleGnomeAmbientConflict();
-    this.handleDisplayStateUpdates();
-    this.handleLightLevelChanges();
-    this.handleBrightnessChanges();
-
-    // Force initial brightness adjustment based on current light level
-    // This ensures brightness is set correctly on extension startup
-    this._resetUserPreference();
+      // Force initial brightness adjustment based on current light level
+      // This ensures brightness is set correctly on extension startup
+      this.resetUserPreference();
+    });
   }
 
   handleGnomeAmbientConflict() {
@@ -106,16 +110,18 @@ export default class AdaptiveBrightnessExtension extends Extension {
     const automaticBucket = this.bucketMapper.mapLuxToBrightness(currentLux, false);
 
     if (automaticBucket) {
+      // GNOME49 quirks: OSD needs update
+      // when brightness bucket has changed since last userPreference update
+      // follow https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/3935
       if (
-        this.displayBrightness.backend.userPreference &&
+        this.displayBrightness.backend._manager?.globalScale?.locked &&
         this._osdBaselineBucketIdx !== this.bucketMapper.currentBucketIndex
       ) {
-        // GNOME49 quirks: OSD needs update
-        // as brightness bucket has changed since last userPreference update
         this._osdBaselineBucketIdx = this.bucketMapper.currentBucketIndex;
         this.displayBrightness.backend.userPreference = automaticBucket.brightness;
         return;
       }
+
       const updatedRatio = this.userLearning.updateBiasFromManualAdjustment(
         manualBrightness,
         automaticBucket.brightness
@@ -133,14 +139,14 @@ export default class AdaptiveBrightnessExtension extends Extension {
           `Brightness preference was set to ${updatedRatio.toFixed(2)}x`,
           {
             transient: true,
-            action: { label: 'Reset', callback: this._resetUserPreference.bind(this) },
+            action: { label: 'Reset', callback: this.resetUserPreference.bind(this) },
           }
         );
       }
     }
   }
 
-  _resetUserPreference() {
+  resetUserPreference() {
     this.userLearning.reset();
     this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
 
@@ -235,7 +241,10 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.notifications = null;
     }
 
+    this.userLearning = null;
+    this.bucketMapper = null;
     this.settings = null;
+
     this._osdBaselineBucketIdx = -1;
   }
 }

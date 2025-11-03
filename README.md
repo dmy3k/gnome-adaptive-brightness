@@ -5,13 +5,13 @@ GNOME Shell extension that automatically adjusts your screen brightness based on
 # Background
 
 GNOME includes "Automatic Screen Brightness" feature, under Settings -> Power -> Power Saving.
-It has a number of issues reported that make it challenging to use in some scenarios (e.g [#277](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/277), [#82](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/82), [#237](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/merge_requests/237)).
+It has a number of issues reported that make it challenging to use in some scenarios:
+[#277](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/277), [#285](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/285), [#575](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/575), [#835](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/835), [#82](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/issues/82), [#237](https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/merge_requests/237))
 
-This extension addresses some of the issues with custom implementation:
+This extension addresses some of the above with custom implementation:
 
 - **Improved Algorithm**: More stable under often changing light conditions
 - **Smooth Transitions**: Gradually changes brightness to avoid jarring jumps
-- **Gamma Correction**: Uses perceptually uniform brightness adjustments (γ=2.2) that match human vision and display hardware
 - **Adaptive Learning**: Learns your brightness preferences and applies them across all light levels
 
 # Installation

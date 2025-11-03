@@ -139,7 +139,7 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should animate brightness using generator-based animator', async () => {
-      const animationPromise = service.animateBrightness(60);
+      const animationPromise = service.animateBrightness(0.6);
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -151,7 +151,7 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should stop animation when display becomes inactive', async () => {
-      const animationPromise = service.animateBrightness(80);
+      const animationPromise = service.animateBrightness(0.8);
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -165,7 +165,7 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should stop animation when _settingBrightness is set to false', async () => {
-      service.animateBrightness(80); // Don't await
+      service.animateBrightness(0.8); // Don't await
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -181,11 +181,11 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should cancel previous animation when starting new one', async () => {
-      const firstAnimation = service.animateBrightness(80);
+      const firstAnimation = service.animateBrightness(0.8);
 
       await new Promise((resolve) => setTimeout(resolve, 30));
 
-      const secondAnimation = service.animateBrightness(60);
+      const secondAnimation = service.animateBrightness(0.6);
 
       // First animation should be cancelled, second should run
       await secondAnimation;
@@ -196,7 +196,7 @@ describe('DisplayBrightnessService', () => {
     it('should call haltAnimatingBrightness before starting new animation', async () => {
       const haltSpy = jest.spyOn(service, 'haltAnimatingBrightness');
 
-      await service.animateBrightness(60);
+      await service.animateBrightness(0.6);
 
       // haltAnimatingBrightness should be called at the start
       expect(haltSpy).toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should clear animation timeout', async () => {
-      service.animateBrightness(80); // Don't await
+      service.animateBrightness(0.8); // Don't await
 
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(service._animationTimeout).not.toBeNull();
@@ -244,7 +244,7 @@ describe('DisplayBrightnessService', () => {
     });
 
     it('should be safe to call multiple times', async () => {
-      service.animateBrightness(80); // Don't await
+      service.animateBrightness(0.8); // Don't await
 
       await new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -265,8 +265,7 @@ describe('DisplayBrightnessService', () => {
       await service.start();
       Main.brightnessManager.globalScale.value = 0.1;
 
-      // Start a long animation (10->90 = 80 steps) - don't await it
-      service.animateBrightness(90);
+      service.animateBrightness(0.9);
 
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(service._animationTimeout).not.toBeNull();

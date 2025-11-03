@@ -10,19 +10,20 @@ const mockProxy = {
   ClaimLightAsync: jest.fn(),
   ReleaseLightAsync: jest.fn(),
   LightLevel: null,
+  LightLevelUnit: 'lux',
   HasAmbientLight: null,
   connect: jest.fn().mockReturnValue(1),
   disconnect: jest.fn(),
   emit: jest.fn(),
 };
 
-let mockProxyConstructor;
+// Create the proxy constructor once and reuse it
+const mockProxyConstructor = jest.fn((bus, busName, objectPath, callback) => {
+  process.nextTick(() => callback(mockProxy, null));
+});
 
-// Mock the makeProxyWrapper to return a constructor function
+// Mock the makeProxyWrapper to return the constructor function
 const mockMakeProxyWrapper = jest.fn((xml) => {
-  mockProxyConstructor = jest.fn((bus, busName, objectPath, callback) => {
-    process.nextTick(() => callback(mockProxy, null));
-  });
   return mockProxyConstructor;
 });
 
@@ -50,6 +51,10 @@ describe('SensorProxyDbus', () => {
     mockProxy.disconnect.mockClear();
     if (mockProxyConstructor) {
       mockProxyConstructor.mockClear();
+      // Restore default implementation for the proxy constructor
+      mockProxyConstructor.mockImplementation((bus, busName, objectPath, callback) => {
+        process.nextTick(() => callback(mockProxy, null));
+      });
     }
 
     mockProxy.ClaimLightAsync.mockImplementation((callback) => {
@@ -252,7 +257,7 @@ describe('SensorProxyDbus', () => {
 
     it('should throw error when not connected', () => {
       dbus.destroy();
-      expect(() => dbus.onPropertiesChanged(() => {})).toThrow('D-Bus proxy not connected');
+      expect(() => dbus.onPropertiesChanged(() => { })).toThrow('D-Bus proxy not connected');
     });
   });
 
