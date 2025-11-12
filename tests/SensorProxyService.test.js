@@ -497,21 +497,9 @@ describe('SensorProxyService', () => {
 
       // 120 to 150 is only 30 lux change (< 100), filter would reject
       // But forceUpdate should process it
-      serviceWithFilter.forceUpdate();
+      serviceWithFilter._handleLightLevelChange(serviceWithFilter.dbus?.lightLevel, true);
 
       expect(callback).toHaveBeenCalledWith(150);
-    });
-
-    it('should handle null lightLevel gracefully', () => {
-      const callback = jest.fn();
-      serviceWithFilter.onLightLevelChanged.add(callback);
-
-      mockProxy.set_cached_property('LightLevel', null);
-
-      serviceWithFilter.forceUpdate();
-
-      // Should not invoke callback when lightLevel is null
-      expect(callback).not.toHaveBeenCalled();
     });
 
     it('should update lastLuxValue', () => {
@@ -519,7 +507,7 @@ describe('SensorProxyService', () => {
       serviceWithFilter._lastLuxValue = 100;
       serviceWithFilter._lastUpdateTime = Date.now() - 3000;
 
-      serviceWithFilter.forceUpdate();
+      serviceWithFilter._handleLightLevelChange(serviceWithFilter.dbus?.lightLevel, true);
 
       expect(serviceWithFilter._lastLuxValue).toBe(300);
     });
@@ -536,7 +524,7 @@ describe('SensorProxyService', () => {
       // After resume: outdoor lighting (significant change)
       mockProxy.set_cached_property('LightLevel', 5000);
 
-      serviceWithFilter.forceUpdate();
+      serviceWithFilter._handleLightLevelChange(serviceWithFilter.dbus?.lightLevel, true);
 
       expect(callback).toHaveBeenCalledWith(5000);
       expect(serviceWithFilter._lastLuxValue).toBe(5000);

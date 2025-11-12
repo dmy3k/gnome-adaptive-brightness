@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.adaptive-brightness" path="/org/gnome/shell/extensions/adaptive-brightness/">
-    <key name="auto-keyboard-backlight" type="b">
-      <default>true</default>
-      <summary>Automatically manage keyboard backlight</summary>
+    <key name="brightness-buckets" type="a(uud)">
+      <default>[(0, 20, 0.15), (5, 200, 0.25), (50, 650, 0.5), (350, 2000, 0.75), (1000, 10000, 1.0)]</default>
+      <summary>Brightness curve buckets</summary>
       <description>
-        When enabled, the extension will automatically control the keyboard backlight
-        based on ambient light conditions. The keyboard backlight will be enabled in
-        low light conditions and disabled in brighter environments.
+        Array of brightness buckets defining how screen brightness responds to ambient light.
+        Each tuple contains: (minimum_lux, maximum_lux, brightness_level).
+        Brightness level is 0.0-1.0 (0-100%).
+        Ranges can overlap to provide hysteresis effect.
+      </description>
+    </key>
+    <key name="keyboard-backlight-buckets" type="au">
+      <default>[0, 1]</default>
+      <summary>Keyboard backlight enabled buckets</summary>
+      <description>
+        Array of bucket indices where keyboard backlight should be enabled.
+        By default, keyboard backlight is enabled for the first two buckets (Night and Very Dark to Dim Indoor).
+        If empty, keyboard backlight is disabled.
       </description>
     </key>
     <key name="keyboard-idle-timeout" type="u">
