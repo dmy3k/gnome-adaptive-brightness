@@ -76,7 +76,7 @@ describe('DisplayBrightnessService', () => {
       service._powerSettings.set_boolean('ambient-enabled', true);
 
       // Trigger brightness change to update display active state
-      service._onBrightnessChanged(0.6);
+      service._processDisplayActiveState(0.6);
 
       // Wait a tick for the signal to propagate
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -86,12 +86,12 @@ describe('DisplayBrightnessService', () => {
 
     it('should restore displayIsActive when ambient-enabled becomes false', async () => {
       service._powerSettings.set_boolean('ambient-enabled', true);
-      service._onBrightnessChanged(0.6);
+      service._processDisplayActiveState(0.6);
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(service.displayIsActive).toBe(false);
 
       service._powerSettings.set_boolean('ambient-enabled', false);
-      service._onBrightnessChanged(0.7);
+      service._processDisplayActiveState(0.7);
       // Need to wait for the 250ms delay when transitioning from inactive to active
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(service.displayIsActive).toBe(true);
@@ -107,7 +107,7 @@ describe('DisplayBrightnessService', () => {
     it('should detect off state when display hardware is unavailable', () => {
       // Simulate display being turned off (GNOME 49 behavior)
       Main.brightnessManager.setDisplayOff(true);
-      service._onBrightnessChanged(null);
+      service._processDisplayActiveState(null);
 
       expect(service.displayIsOff).toBe(true);
       expect(service.displayIsDimmed).toBe(false);
@@ -118,7 +118,7 @@ describe('DisplayBrightnessService', () => {
       Main.brightnessManager.dimming = true;
 
       // Trigger brightness change to update dimmed state
-      service._onBrightnessChanged(0.3);
+      service._processDisplayActiveState(0.3);
 
       expect(service.displayIsDimmed).toBe(true);
       expect(service.displayIsOff).toBe(false);
@@ -126,7 +126,7 @@ describe('DisplayBrightnessService', () => {
 
     it('should set inactive immediately when transitioning to dimmed', () => {
       Main.brightnessManager.dimming = true;
-      service._onBrightnessChanged(0.3);
+      service._processDisplayActiveState(0.3);
       expect(service.displayIsActive).toBe(false);
     });
   });
@@ -311,26 +311,26 @@ describe('DisplayBrightnessService', () => {
 
     it('should handle complete brightness cycle', async () => {
       Main.brightnessManager.globalScale.value = 0.5;
-      service._onBrightnessChanged(0.5);
+      service._processDisplayActiveState(0.5);
 
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(service.displayIsActive).toBe(true);
 
       // Simulate dimming
       Main.brightnessManager.dimming = true;
-      service._onBrightnessChanged(0.3);
+      service._processDisplayActiveState(0.3);
       expect(service.displayIsDimmed).toBe(true);
       expect(service.displayIsActive).toBe(false);
 
       // Simulate display off (GNOME 49 behavior)
       Main.brightnessManager.setDisplayOff(true);
-      service._onBrightnessChanged(null);
+      service._processDisplayActiveState(null);
       expect(service.displayIsOff).toBe(true);
 
       // Display back on
       Main.brightnessManager.setDisplayOff(false);
       Main.brightnessManager.dimming = false;
-      service._onBrightnessChanged(0.5);
+      service._processDisplayActiveState(0.5);
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(service.displayIsActive).toBe(true);
       expect(service.displayIsOff).toBe(false);

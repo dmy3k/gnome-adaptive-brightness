@@ -2,6 +2,8 @@
 
 GNOME Shell extension that automatically adjusts your screen brightness based on ambient light conditions, helping to reduce eye strain and save energy. It also includes an optional keyboard backlight service that runs automatically based on ambient light.
 
+![Screenshots](.github/img/preview.png)
+
 # Background
 
 GNOME includes "Automatic Screen Brightness" feature, under Settings -> Power -> Power Saving.
@@ -12,7 +14,7 @@ This extension addresses some of the above with custom implementation:
 
 - **Improved Algorithm**: More stable under often changing light conditions
 - **Smooth Transitions**: Gradually changes brightness to avoid jarring jumps
-- **Adaptive Learning**: Learns your brightness preferences and applies them across all light levels
+- **Customizable Brightness Curves**: Configure brightness response with an interactive graph-based UI
 
 # Installation
 

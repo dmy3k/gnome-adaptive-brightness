@@ -31,7 +31,12 @@ describe('KeyboardBacklightService', () => {
 
     // Mock settings
     mockSettings = {
-      get_boolean: jest.fn().mockReturnValue(true), // auto-keyboard-backlight enabled
+      get_value: jest.fn().mockReturnValue({
+        n_children: jest.fn().mockReturnValue(2), // Default [0, 1] - first two buckets enabled
+        get_child_value: jest.fn((i) => ({
+          get_uint32: () => i, // Return bucket indices 0, 1
+        })),
+      }),
       get_uint: jest.fn().mockReturnValue(10), // keyboard-idle-timeout default (10 seconds)
       connect: jest.fn().mockReturnValue(1), // Return signal ID
       disconnect: jest.fn(),
@@ -112,21 +117,21 @@ describe('KeyboardBacklightService', () => {
     });
   });
 
-  describe('updateForLightLevel()', () => {
+  describe('updateForBrightnessBucket()', () => {
     beforeEach(async () => {
       await service.start();
     });
 
     it('should enable backlight and add idle watch in low light', async () => {
       mockDbus.isEnabled = false;
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
 
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(1);
     });
 
     it('should add idle watch after enabling backlight', async () => {
       mockDbus.isEnabled = true; // Simulate backlight is now on
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(1); // Bucket 1 is enabled
 
       // Wait for async operations
       await new Promise((resolve) => setImmediate(resolve));
@@ -137,30 +142,42 @@ describe('KeyboardBacklightService', () => {
     it('should disable backlight and remove watches in bright light', async () => {
       // First enable in low light
       mockDbus.isEnabled = true;
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
       await new Promise((resolve) => setImmediate(resolve));
 
       // Reset mocks
       jest.clearAllMocks();
 
       // Then switch to bright light
-      await service.updateForLightLevel(false);
+      await service.updateForBrightnessBucket(2); // Bucket 2 is NOT enabled
 
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(0);
       expect(mockIdleMonitor.stopMonitoring).toHaveBeenCalled();
     });
 
-    it('should not do anything when auto-keyboard-backlight is disabled', async () => {
-      mockSettings.get_boolean.mockReturnValue(false);
+    it('should disable backlight when no buckets are enabled', async () => {
+      // When no buckets are enabled, extension.js passes bucket index but it won't match
+      mockDbus.isEnabled = true; // Backlight starts enabled
 
-      await service.updateForLightLevel(true);
+      // Mock empty array (all buckets disabled)
+      mockSettings.get_value.mockReturnValue({
+        n_children: jest.fn().mockReturnValue(0),
+        get_child_value: jest.fn(),
+      });
+      // Need to reload enabled buckets
+      const settingsCallback = mockSettings.connect.mock.calls[0][1];
+      await settingsCallback(mockSettings, 'keyboard-backlight-buckets');
 
-      expect(mockDbus.setBrightness).not.toHaveBeenCalled();
+      await service.updateForBrightnessBucket(0); // Bucket 0 not enabled anymore
+
+      // Should disable the backlight
+      expect(mockDbus.setBrightness).toHaveBeenCalledWith(0);
+      expect(mockIdleMonitor.stopMonitoring).toHaveBeenCalled();
     });
 
     it('should not add idle watch if setBrightness throws error', async () => {
       mockDbus.setBrightness.mockRejectedValueOnce(new Error('Hardware failure'));
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0);
 
       await new Promise((resolve) => setImmediate(resolve));
 
@@ -182,7 +199,7 @@ describe('KeyboardBacklightService', () => {
     it('should remove any active watches', async () => {
       // First enable backlight with watches
       mockDbus.isEnabled = true;
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
       await new Promise((resolve) => setImmediate(resolve));
 
       jest.clearAllMocks();
@@ -198,7 +215,7 @@ describe('KeyboardBacklightService', () => {
     beforeEach(async () => {
       await service.start();
       mockDbus.isEnabled = true;
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
       await new Promise((resolve) => setImmediate(resolve));
       jest.clearAllMocks();
     });
@@ -257,8 +274,8 @@ describe('KeyboardBacklightService', () => {
       await idleCallback(true);
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Light increases while user is idle (calls updateForLightLevel with false)
-      await service.updateForLightLevel(false);
+      // Light increases while user is idle
+      await service.updateForBrightnessBucket(2); // Bucket 2 is NOT enabled
 
       jest.clearAllMocks();
       mockDbus.isEnabled = false;
@@ -280,11 +297,11 @@ describe('KeyboardBacklightService', () => {
     it('should not add duplicate idle watches', async () => {
       mockDbus.isEnabled = true;
 
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
       await new Promise((resolve) => setImmediate(resolve));
 
       // Try to enable again
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0);
       await new Promise((resolve) => setImmediate(resolve));
 
       // Should only add watch once
@@ -293,7 +310,7 @@ describe('KeyboardBacklightService', () => {
 
     it('should properly clean up watches on destroy', async () => {
       mockDbus.isEnabled = true;
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(1); // Bucket 1 is enabled
       await new Promise((resolve) => setImmediate(resolve));
 
       await service.destroy();
@@ -313,18 +330,31 @@ describe('KeyboardBacklightService', () => {
       settingsCallback = mockSettings.connect.mock.calls[0][1];
     });
 
-    it('should disable backlight when auto-keyboard-backlight is turned off', async () => {
-      mockSettings.get_boolean.mockReturnValue(false);
+    it('should disable backlight when keyboard-backlight-buckets becomes empty', async () => {
+      // First enable backlight in a bucket
+      mockDbus.isEnabled = true;
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
+      await new Promise((resolve) => setImmediate(resolve));
 
-      await settingsCallback(mockSettings, 'auto-keyboard-backlight');
+      jest.clearAllMocks();
 
+      // Mock empty array (all buckets disabled)
+      mockSettings.get_value.mockReturnValue({
+        n_children: jest.fn().mockReturnValue(0),
+        get_child_value: jest.fn(),
+      });
+
+      // Trigger settings change callback
+      await settingsCallback(mockSettings, 'keyboard-backlight-buckets');
+
+      // Now bucket 0 is not enabled, should disable backlight
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(0);
     });
 
     it('should restart idle watch when keyboard-idle-timeout changes', async () => {
       // First enable backlight with watches
       mockDbus.isEnabled = true;
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 is enabled
       await new Promise((resolve) => setImmediate(resolve));
 
       jest.clearAllMocks();
@@ -351,7 +381,7 @@ describe('KeyboardBacklightService', () => {
       mockSettings.get_uint.mockReturnValue(30); // 30 seconds
       mockDbus.isEnabled = true;
 
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(1); // Bucket 1 is enabled
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(mockIdleMonitor.startMonitoring).toHaveBeenCalledWith(30000, expect.any(Function));
@@ -385,7 +415,7 @@ describe('KeyboardBacklightService', () => {
         return Promise.resolve();
       });
 
-      await service.updateForLightLevel(true); // Dark - enables backlight
+      await service.updateForBrightnessBucket(0); // Bucket 0 enabled - dark
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(1);
       expect(mockIdleMonitor.startMonitoring).toHaveBeenCalled();
 
@@ -398,13 +428,13 @@ describe('KeyboardBacklightService', () => {
       mockDbus.setBrightness.mockClear();
 
       // Step 2: Bright lamp turned on while idle
-      await service.updateForLightLevel(false); // Bright
+      await service.updateForBrightnessBucket(2); // Bucket 2 NOT enabled - bright
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(0); // Stays off
       expect(mockIdleMonitor.stopMonitoring).toHaveBeenCalled(); // Monitoring stopped
 
       // Step 3: Lamp turned off - back to dark
       mockDbus.setBrightness.mockClear();
-      await service.updateForLightLevel(true); // Dark again
+      await service.updateForBrightnessBucket(0); // Bucket 0 enabled - dark again
 
       // BUG FIX: Should re-enable backlight because we stopped monitoring
       // and can no longer track if user is idle. We assume user is active.
@@ -421,7 +451,7 @@ describe('KeyboardBacklightService', () => {
       });
 
       // Dark room, backlight enabled
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 enabled
       mockDbus.setBrightness.mockClear();
 
       // User goes idle
@@ -429,9 +459,9 @@ describe('KeyboardBacklightService', () => {
       mockDbus.isEnabled = false;
       mockDbus.setBrightness.mockClear();
 
-      // Lamp turned on then off while idle (updateForLightLevel calls)
-      await service.updateForLightLevel(false);
-      await service.updateForLightLevel(true);
+      // Lamp turned on then off while idle
+      await service.updateForBrightnessBucket(2); // Bucket 2 NOT enabled
+      await service.updateForBrightnessBucket(0); // Bucket 0 enabled
       mockDbus.setBrightness.mockClear();
 
       // User becomes active again in dark room
@@ -448,7 +478,7 @@ describe('KeyboardBacklightService', () => {
       });
 
       // Step 1: Dark room, backlight enabled, monitoring starts
-      await service.updateForLightLevel(true);
+      await service.updateForBrightnessBucket(0); // Bucket 0 enabled
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(1);
       const firstSessionCallback = idleCallback; // Save reference to first session callback
       mockDbus.setBrightness.mockClear();
@@ -460,8 +490,8 @@ describe('KeyboardBacklightService', () => {
       mockDbus.setBrightness.mockClear();
 
       // Step 3: Light increases (stops monitoring), then decreases again quickly
-      await service.updateForLightLevel(false); // Bright - stops monitoring
-      await service.updateForLightLevel(true); // Dark again - starts NEW monitoring session
+      await service.updateForBrightnessBucket(2); // Bucket 2 NOT enabled - stops monitoring
+      await service.updateForBrightnessBucket(0); // Bucket 0 enabled - starts NEW monitoring session
       expect(mockDbus.setBrightness).toHaveBeenCalledWith(1); // Backlight re-enabled
       mockDbus.setBrightness.mockClear();
 

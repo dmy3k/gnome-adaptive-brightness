@@ -4,26 +4,15 @@ import * as LoginManager from 'resource:///org/gnome/shell/misc/loginManager.js'
 import { NotificationService } from './lib/NotificationService.js';
 import { DisplayBrightnessService } from './lib/DisplayBrightnessService.js';
 import { SensorProxyService } from './lib/SensorProxyService.js';
-import { UserPreferenceLearning } from './lib/UserPreferenceLearning.js';
 import { BucketMapper } from './lib/BucketMapper.js';
 import { KeyboardBacklightService } from './lib/KeyboardBacklightService.js';
 
-const BRIGHTNESS_BUCKETS = [
-  { min: 0, max: 20, brightness: 0.15 }, // Night
-  { min: 5, max: 200, brightness: 0.25 }, // Very dark to dim indoor
-  { min: 50, max: 650, brightness: 0.5 }, // Dim to normal indoor
-  { min: 350, max: 2000, brightness: 0.75 }, // Normal to bright indoor
-  { min: 1000, max: 7000, brightness: 1.0 }, // Bright indoor to outdoor
-  { min: 5000, max: 10000, brightness: 2.0 }, // Direct sunlight (allows to reach full brightness when brightness bias is < 1)
-];
-
 export default class AdaptiveBrightnessExtension extends Extension {
   enable() {
-    this._osdBaselineBucketIdx = -1;
     this.settings = this.getSettings();
 
-    this.bucketMapper = new BucketMapper(BRIGHTNESS_BUCKETS);
-    this.userLearning = new UserPreferenceLearning();
+    const buckets = this._loadBucketsFromSettings();
+    this.bucketMapper = new BucketMapper(buckets);
 
     this.notifications = new NotificationService();
     this.displayBrightness = new DisplayBrightnessService();
@@ -49,135 +38,112 @@ export default class AdaptiveBrightnessExtension extends Extension {
         console.log('Some required services failed to start', results);
         return;
       }
-      this.handleSleepResumeEvents();
-      this.handleGnomeAmbientConflict();
-      this.handleDisplayStateUpdates();
-      this.handleLightLevelChanges();
-      this.handleBrightnessChanges();
+      this.setupHandlers();
 
-      // Force initial brightness adjustment based on current light level
-      // This ensures brightness is set correctly on extension startup
-      this.resetUserPreference();
+      // Set initial brightness based on current light level
+      this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
     });
   }
 
-  handleGnomeAmbientConflict() {
-    const notify = (enabled) => {
-      if (enabled) {
-        this.notifications.showNotification(
-          'Adaptive Brightness Extension',
-          "GNOME's automatic brightness feature is enabled. Press to disable it in Settings → Power, allowing the extension to work properly.",
-          {
-            transient: true,
-            onActivate: () => {
-              GLib.spawn_command_line_async('gnome-control-center power');
-            },
-          }
-        );
+  _loadBucketsFromSettings() {
+    const bucketsVariant = this.settings.get_value('brightness-buckets');
+    const buckets = [];
+
+    for (let i = 0; i < bucketsVariant.n_children(); i++) {
+      const tuple = bucketsVariant.get_child_value(i);
+      buckets.push({
+        min: tuple.get_child_value(0).get_uint32(),
+        max: tuple.get_child_value(1).get_uint32(),
+        brightness: tuple.get_child_value(2).get_double(),
+      });
+    }
+
+    return buckets;
+  }
+
+  setupHandlers() {
+    this.sleepResumeSignalId = this.loginManager?.connect(
+      'prepare-for-sleep',
+      (lm, aboutToSuspend) => {
+        // Pause processing brightness during transitions from/to suspend
+        // Force an update on resume to handle lighting changes during sleep
+        this.displayBrightness.paused = aboutToSuspend;
       }
-    };
+    );
 
-    this.displayBrightness.onAmbientEnabledChanged.add(notify);
-
-    // Check initial state
-    notify(this.displayBrightness.isGSDambientEnabled);
-  }
-
-  handleDisplayStateUpdates() {
     this.displayBrightness.onDisplayIsActiveChanged.add(() => {
-      this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel);
+      this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
     });
-  }
-
-  handleBrightnessChanges() {
     this.displayBrightness.backend.onUserPreferenceChange.add(
       this.handleManualAdjustment.bind(this)
     );
+    this.displayBrightness.onAmbientEnabledChanged.add(
+      this.handleGSDAmbientEnableChanged.bind(this)
+    );
+    this.handleGSDAmbientEnableChanged(this.displayBrightness.isGSDambientEnabled);
+
+    this.sensorProxy.onLightLevelChanged.add((x) => this.adjustBrightnessForLightLevel(x));
+    this.sensorProxy.onSensorAvailableChanged.add(this.handleSensorAvailableChanged.bind(this));
+
+    this.bucketSettingsChangedId = this.settings.connect('changed::brightness-buckets', () => {
+      const buckets = this._loadBucketsFromSettings();
+      this.bucketMapper = new BucketMapper(buckets);
+      this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
+    });
+  }
+
+  handleSensorAvailableChanged(val) {
+    if (val === false) {
+      this.notifications.showNotification(
+        'Adaptive Brightness Extension',
+        `Ambient Light Sensor is not available. Extension will not function`,
+        { transient: false }
+      );
+    }
+  }
+
+  handleGSDAmbientEnableChanged(val) {
+    if (val) {
+      this.notifications.showNotification(
+        'Adaptive Brightness Extension',
+        "GNOME's automatic brightness feature is enabled. Press to disable it in Settings → Power, allowing the extension to work properly.",
+        {
+          transient: true,
+          onActivate: () => {
+            GLib.spawn_command_line_async('gnome-control-center power');
+          },
+        }
+      );
+    }
   }
 
   handleManualAdjustment(manualBrightness) {
-    const currentLux = this.sensorProxy.dbus.lightLevel;
-
     if (
       !this.displayBrightness.displayIsActive ||
       this.displayBrightness._settingBrightness ||
       manualBrightness === null ||
-      currentLux === null
+      this.sensorProxy.dbus.lightLevel === null ||
+      this.displayBrightness.paused
     ) {
       return;
     }
 
-    const automaticBucket = this.bucketMapper.mapLuxToBrightness(currentLux, false);
+    // Pause automatic brightness management
+    this.displayBrightness.paused = true;
 
-    if (automaticBucket) {
-      // GNOME49 quirks: OSD needs update
-      // when brightness bucket has changed since last userPreference update
-      // follow https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/3935
-      if (
-        this.displayBrightness.backend._manager?.globalScale?.locked &&
-        this._osdBaselineBucketIdx !== this.bucketMapper.currentBucketIndex
-      ) {
-        this._osdBaselineBucketIdx = this.bucketMapper.currentBucketIndex;
-        this.displayBrightness.backend.userPreference = automaticBucket.brightness;
-        return;
-      }
-
-      const updatedRatio = this.userLearning.updateBiasFromManualAdjustment(
-        manualBrightness,
-        automaticBucket.brightness
-      );
-
-      if (!updatedRatio) {
-        return;
-      }
-      if (Math.abs(1 - updatedRatio) < 0.01) {
-        this.notifications.clearNotification();
-      } else {
-        this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
-        this.notifications.showNotification(
-          'Adaptive Brightness Extension',
-          `Brightness preference was set to ${updatedRatio.toFixed(2)}x`,
-          {
-            transient: true,
-            action: { label: 'Reset', callback: this.resetUserPreference.bind(this) },
-          }
-        );
-      }
-    }
-  }
-
-  resetUserPreference() {
-    this.userLearning.reset();
-    this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
-
-    const bucket = this.bucketMapper.buckets[this.bucketMapper.currentBucketIndex];
-    if (bucket) {
-      this.displayBrightness.backend.userPreference = bucket?.brightness;
-    }
-  }
-
-  handleLightLevelChanges() {
-    this.sensorProxy.onLightLevelChanged.add((x) => this.adjustBrightnessForLightLevel(x));
-
-    this.sensorProxy.onSensorAvailableChanged.add((val) => {
-      if (val === false) {
-        this.notifications.showNotification(
-          'Adaptive Brightness Extension',
-          `Ambient Light Sensor is not available. Extension will not function`,
-          { transient: false }
-        );
-      }
-    });
-  }
-
-  handleSleepResumeEvents() {
-    this.sleepResumeSignalId = this.loginManager?.connect(
-      'prepare-for-sleep',
-      (lm, aboutToSuspend) => {
-        if (!aboutToSuspend) {
-          // Force an update on resume to handle lighting changes during sleep
-          this.sensorProxy.forceUpdate();
-        }
+    // Show notification with resume on dismiss
+    this.notifications.showNotification(
+      'Adaptive Brightness',
+      'Automatic brightness management is paused. Dismiss this notification to resume.',
+      {
+        transient: false,
+        onDestroy: () => {
+          this.displayBrightness.paused = false;
+        },
+        action: {
+          label: 'Settings',
+          callback: () => this.openPreferences(),
+        },
       }
     );
   }
@@ -191,17 +157,17 @@ export default class AdaptiveBrightnessExtension extends Extension {
     const targetBucket = this.bucketMapper.mapLuxToBrightness(luxValue);
 
     if (targetBucket) {
-      const biasedBrightness = this.userLearning.applyBiasTo(targetBucket.brightness);
+      const targetBrightness = targetBucket.brightness;
 
       if (immediate) {
-        this.displayBrightness.backend.brightness = biasedBrightness;
+        this.displayBrightness.backend.brightness = targetBrightness;
       } else {
-        this.displayBrightness.animateBrightness(biasedBrightness).catch((e) => console.error(e));
+        this.displayBrightness.animateBrightness(targetBrightness).catch((e) => console.error(e));
       }
 
-      // Update keyboard backlight based on current light level
-      const isInLowestBucket = this.bucketMapper.currentBucketIndex === 0;
-      this.keyboardBacklight.updateForLightLevel(isInLowestBucket).catch((e) => console.error(e));
+      this.keyboardBacklight
+        .updateForBrightnessBucket(this.bucketMapper.currentBucketIndex)
+        .catch((e) => console.error(e));
     }
   }
 
@@ -216,9 +182,9 @@ export default class AdaptiveBrightnessExtension extends Extension {
     }
     this.loginManager = null;
 
-    if (this.biasRatioSignalId) {
-      this.settings?.disconnect(this.biasRatioSignalId);
-      this.biasRatioSignalId = null;
+    if (this.bucketSettingsChangedId) {
+      this.settings?.disconnect(this.bucketSettingsChangedId);
+      this.bucketSettingsChangedId = null;
     }
 
     if (this.sensorProxy) {
@@ -241,10 +207,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.notifications = null;
     }
 
-    this.userLearning = null;
     this.bucketMapper = null;
     this.settings = null;
-
-    this._osdBaselineBucketIdx = -1;
   }
 }
