@@ -4,6 +4,7 @@ import Gtk from 'gi://Gtk';
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import { SensorProxyDbus } from './lib/SensorProxyDbus.js';
 import { BucketMapper } from './lib/BucketMapper.js';
+import { KeyboardBacklightDbus } from './lib/KeyboardBacklightDbus.js';
 
 export default class AdaptiveBrightnessPreferences extends ExtensionPreferences {
   fillPreferencesWindow(window) {
@@ -22,12 +23,17 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     this.sensorProxy = new SensorProxyDbus();
     this._initSensorProxy();
 
+    // Initialize keyboard backlight D-Bus for available levels
+    this.keyboardBacklightDbus = new KeyboardBacklightDbus();
+    this._initKeyboardBacklight();
+
     // Initialize bucket mapper for hysteresis logic
     this.bucketMapper = null;
 
     // Clean up on window close
     window.connect('close-request', () => {
       this._cleanupSensorProxy();
+      this._cleanupKeyboardBacklight();
       return false;
     });
 
@@ -47,7 +53,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Initialize bucket mapper with current buckets for hysteresis
     this.bucketMapper = new BucketMapper(buckets);
 
-    // Create Calibration page (first/default)
+    // Create Display page (first/default)
     this._createCalibrationPage(window, settings, buckets);
 
     // Create Preview page
@@ -78,17 +84,18 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
   _createCalibrationPage(window, settings, buckets) {
     const page = new Adw.PreferencesPage({
-      title: 'Calibration',
+      title: 'Display',
       icon_name: 'preferences-desktop-display-symbolic',
     });
     window.add(page);
 
     // Create a brightness curves group
     const curvesGroup = new Adw.PreferencesGroup({
-      title: 'Brightness Buckets',
+      title: 'Brightness Levels',
       description:
-        'Configure the light ranges (in lux) and target brightness for each bucket.',
+        'Adjust how your screen brightness responds to different lighting conditions.',
     });
+
     page.add(curvesGroup);
 
     // Create UI rows for each bucket
@@ -115,13 +122,15 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Set initial constraints based on bucket configuration
     this._updateBucketConstraints();
 
-    // Add reset button
+    // Add reset button centered below the group
     const resetButton = new Gtk.Button({
       label: 'Reset to Defaults',
       halign: Gtk.Align.CENTER,
-      margin_top: 12,
+      margin_top: 20,
+      margin_bottom: 12,
       css_classes: ['pill'],
     });
+
     resetButton.connect('clicked', () => {
       settings.reset('brightness-buckets');
 
@@ -151,12 +160,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
         this.drawingArea.queue_draw();
       }
     });
-    const resetBox = new Gtk.Box({
-      orientation: Gtk.Orientation.VERTICAL,
-      margin_top: 12,
-    });
-    resetBox.append(resetButton);
-    curvesGroup.add(resetBox);
+
+    curvesGroup.add(resetButton);
   }
 
   _createKeyboardBacklightPage(window, settings, buckets) {
@@ -169,39 +174,61 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Create a keyboard backlight group
     const keyboardGroup = new Adw.PreferencesGroup({
       title: 'Automatic Keyboard Backlight',
-      description: 'Select brightness ranges where keyboard backlight should be enabled. If none selected, keyboard backlight is disabled.',
+      description: 'Select keyboard backlight level for each brightness range. Set to "Off" to disable backlight for that range.',
     });
     page.add(keyboardGroup);
 
-    // Get current keyboard backlight bucket settings
-    const keyboardBucketsVariant = settings.get_value('keyboard-backlight-buckets');
-    const enabledBuckets = new Set();
-    for (let i = 0; i < keyboardBucketsVariant.n_children(); i++) {
-      enabledBuckets.add(keyboardBucketsVariant.get_child_value(i).get_uint32());
+    // Get current keyboard backlight level settings
+    const keyboardLevelsVariant = settings.get_value('keyboard-backlight-levels');
+    const backlightLevels = [];
+    for (let i = 0; i < keyboardLevelsVariant.n_children(); i++) {
+      backlightLevels.push(keyboardLevelsVariant.get_child_value(i).get_uint32());
     }
 
-    // Create checkbox rows for each bucket
-    this.keyboardCheckboxes = [];
+    // Get available backlight levels from hardware
+    const availableLevels = this._getAvailableBacklightLevels();
+
+    // Create dropdown rows for each bucket
+    this.keyboardDropdowns = [];
     buckets.forEach((bucket, index) => {
-      const checkRow = new Adw.ActionRow({
+      const currentLevel = backlightLevels[index] ?? 0;
+
+      const comboRow = new Adw.ComboRow({
         title: bucket.name,
-        activatable: true,
       });
 
-      const checkButton = new Gtk.CheckButton({
-        active: enabledBuckets.has(index),
-        valign: Gtk.Align.CENTER,
+      // Create string list model for dropdown options
+      const model = new Gtk.StringList();
+      for (let level = 0; level <= availableLevels; level++) {
+        if (level === 0) {
+          model.append('Off');
+        } else if (availableLevels === 1) {
+          // Single level devices (on/off only)
+          model.append('On');
+        } else if (availableLevels === 2) {
+          // Two level devices (common case)
+          model.append(level === 1 ? 'Low' : 'High');
+        } else {
+          // Multi-level devices (3+ levels)
+          if (level === 1) {
+            model.append('Low');
+          } else if (level === availableLevels) {
+            model.append('High');
+          } else {
+            model.append(`Medium${availableLevels > 3 ? ' ' + level : ''}`);
+          }
+        }
+      }
+
+      comboRow.set_model(model);
+      comboRow.set_selected(currentLevel);
+
+      comboRow.connect('notify::selected', () => {
+        this._saveKeyboardBacklightLevels(settings);
       });
 
-      checkButton.connect('toggled', () => {
-        this._saveKeyboardBacklightBuckets(settings);
-      });
-
-      checkRow.add_prefix(checkButton);
-      checkRow.set_activatable_widget(checkButton);
-
-      this.keyboardCheckboxes.push({ checkButton, bucketIndex: index });
-      keyboardGroup.add(checkRow);
+      this.keyboardDropdowns.push({ comboRow, bucketIndex: index });
+      keyboardGroup.add(comboRow);
     });
 
     // Create idle timeout group
@@ -442,20 +469,18 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     }
   }
 
-  _saveKeyboardBacklightBuckets(settings) {
+  _saveKeyboardBacklightLevels(settings) {
     if (!settings) {
-      console.error('[Prefs] No settings object provided to _saveKeyboardBacklightBuckets');
+      console.error('[Prefs] No settings object provided to _saveKeyboardBacklightLevels');
       return;
     }
 
-    // Build array of enabled bucket indices
+    // Build array of backlight levels for each bucket
     const GLib = imports.gi.GLib;
-    const enabledIndices = this.keyboardCheckboxes
-      .filter((item) => item.checkButton.active)
-      .map((item) => item.bucketIndex);
+    const levels = this.keyboardDropdowns.map((item) => item.comboRow.get_selected());
 
-    const variant = new GLib.Variant('au', enabledIndices);
-    settings.set_value('keyboard-backlight-buckets', variant);
+    const variant = new GLib.Variant('au', levels);
+    settings.set_value('keyboard-backlight-levels', variant);
   }
 
   _updateExpanderSubtitle(expanderRow, minLuxRow, maxLuxRow, brightnessRow) {
@@ -463,6 +488,22 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     const maxLux = maxLuxRow.get_value();
     const brightness = brightnessRow.get_value();
     expanderRow.subtitle = `${minLux}–${maxLux} lux → ${brightness}% brightness`;
+  }
+
+  async _initKeyboardBacklight() {
+    try {
+      await this.keyboardBacklightDbus.connect();
+    } catch (error) {
+      console.error('Failed to initialize keyboard backlight D-Bus:', error);
+    }
+  }
+
+  _getAvailableBacklightLevels() {
+    if (!this.keyboardBacklightDbus || !this.keyboardBacklightDbus.isAvailable) {
+      // Default to 2 levels if hardware not available (for testing/fallback)
+      return 2;
+    }
+    return this.keyboardBacklightDbus._maxBrightness;
   }
 
   async _initSensorProxy() {
@@ -841,6 +882,13 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
       this.sensorProxy.releaseLight();
       this.sensorProxy.destroy();
       this.sensorProxy = null;
+    }
+  }
+
+  _cleanupKeyboardBacklight() {
+    if (this.keyboardBacklightDbus) {
+      this.keyboardBacklightDbus.destroy();
+      this.keyboardBacklightDbus = null;
     }
   }
 }

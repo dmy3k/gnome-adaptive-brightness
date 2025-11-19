@@ -11,13 +11,15 @@
         Ranges can overlap to provide hysteresis effect.
       </description>
     </key>
-    <key name="keyboard-backlight-buckets" type="au">
-      <default>[0, 1]</default>
-      <summary>Keyboard backlight enabled buckets</summary>
+    <key name="keyboard-backlight-levels" type="au">
+      <default>[2, 1, 0, 0, 0]</default>
+      <summary>Keyboard backlight levels per bucket</summary>
       <description>
-        Array of bucket indices where keyboard backlight should be enabled.
-        By default, keyboard backlight is enabled for the first two buckets (Night and Very Dark to Dim Indoor).
-        If empty, keyboard backlight is disabled.
+        Array of keyboard backlight levels for each brightness bucket.
+        Each value is the backlight brightness level (0 to hardware max) to apply when in that bucket.
+        0 means backlight is off for that bucket.
+        The array length must match the number of brightness buckets.
+        Default: [2, 1, 0, 0, 0] means full brightness in darkest bucket, low in second bucket, off for others.
       </description>
     </key>
     <key name="keyboard-idle-timeout" type="u">
