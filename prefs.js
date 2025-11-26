@@ -4,7 +4,20 @@ import Gtk from 'gi://Gtk';
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import { SensorProxyDbus } from './lib/SensorProxyDbus.js';
 import { BucketMapper } from './lib/BucketMapper.js';
-import { KeyboardBacklightDbus } from './lib/KeyboardBacklightDbus.js';
+
+function loadInterfaceXML(iface) {
+  let uri = `resource:///org/gnome/shell/dbus-interfaces/${iface}.xml`;
+  let f = Gio.File.new_for_uri(uri);
+
+  try {
+    let [ok_, bytes] = f.load_contents(null);
+    return new TextDecoder().decode(bytes);
+  } catch (e) {
+    console.error(`Failed to load D-Bus interface ${iface}`);
+  }
+
+  return null;
+}
 
 export default class AdaptiveBrightnessPreferences extends ExtensionPreferences {
   fillPreferencesWindow(window) {
@@ -22,10 +35,6 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Initialize sensor proxy for live preview
     this.sensorProxy = new SensorProxyDbus();
     this._initSensorProxy();
-
-    // Initialize keyboard backlight D-Bus for available levels
-    this.keyboardBacklightDbus = new KeyboardBacklightDbus();
-    this._initKeyboardBacklight();
 
     // Initialize bucket mapper for hysteresis logic
     this.bucketMapper = null;
@@ -59,8 +68,25 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Create Preview page
     this._createInspectorPage(window, settings, buckets);
 
+    // Initialize keyboard backlight D-Bus for available levels
+    const KeyboardBrightnessInterface = loadInterfaceXML('org.gnome.SettingsDaemon.Power.Keyboard');
+    const KeyboardBrightnessProxy = Gio.DBusProxy.makeProxyWrapper(KeyboardBrightnessInterface);
+
     // Create Keyboard Backlight page
-    this._createKeyboardBacklightPage(window, settings, buckets);
+    new KeyboardBrightnessProxy(
+      Gio.DBus.session,
+      'org.gnome.SettingsDaemon.Power',
+      '/org/gnome/SettingsDaemon/Power',
+      (proxy, error) => {
+        if (error) {
+          console.error(error);
+        } else {
+          this.kbdBrightnessProxy = proxy;
+        }
+        this._createKeyboardBacklightPage(window, settings, buckets);
+      }
+    );
+
   }
 
   _createInspectorPage(window, settings, buckets) {
@@ -92,8 +118,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Create a brightness curves group
     const curvesGroup = new Adw.PreferencesGroup({
       title: 'Brightness Levels',
-      description:
-        'Adjust how your screen brightness responds to different lighting conditions.',
+      description: 'Adjust how your screen brightness responds to different lighting conditions.',
     });
 
     page.add(curvesGroup);
@@ -174,7 +199,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     // Create a keyboard backlight group
     const keyboardGroup = new Adw.PreferencesGroup({
       title: 'Automatic Keyboard Backlight',
-      description: 'Select keyboard backlight level for each brightness range. Set to "Off" to disable backlight for that range.',
+      description:
+        'Select keyboard backlight level for each brightness range. Set to "Off" to disable backlight for that range.',
     });
     page.add(keyboardGroup);
 
@@ -186,7 +212,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     }
 
     // Get available backlight levels from hardware
-    const availableLevels = this._getAvailableBacklightLevels();
+    const availableLevels = this.kbdBrightnessProxy?.Steps;
 
     // Create dropdown rows for each bucket
     this.keyboardDropdowns = [];
@@ -199,18 +225,18 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
       // Create string list model for dropdown options
       const model = new Gtk.StringList();
-      for (let level = 0; level <= availableLevels; level++) {
-        if (level === 0) {
+      for (let level = 1; level <= availableLevels; level++) {
+        if (level === 1) {
           model.append('Off');
-        } else if (availableLevels === 1) {
+        } else if (availableLevels === 2) {
           // Single level devices (on/off only)
           model.append('On');
-        } else if (availableLevels === 2) {
+        } else if (availableLevels === 3) {
           // Two level devices (common case)
-          model.append(level === 1 ? 'Low' : 'High');
+          model.append(level === 2 ? 'Low' : 'High');
         } else {
           // Multi-level devices (3+ levels)
-          if (level === 1) {
+          if (level === 2) {
             model.append('Low');
           } else if (level === availableLevels) {
             model.append('High');
@@ -490,22 +516,6 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     expanderRow.subtitle = `${minLux}–${maxLux} lux → ${brightness}% brightness`;
   }
 
-  async _initKeyboardBacklight() {
-    try {
-      await this.keyboardBacklightDbus.connect();
-    } catch (error) {
-      console.error('Failed to initialize keyboard backlight D-Bus:', error);
-    }
-  }
-
-  _getAvailableBacklightLevels() {
-    if (!this.keyboardBacklightDbus || !this.keyboardBacklightDbus.isAvailable) {
-      // Default to 2 levels if hardware not available (for testing/fallback)
-      return 2;
-    }
-    return this.keyboardBacklightDbus._maxBrightness;
-  }
-
   async _initSensorProxy() {
     try {
       await this.sensorProxy.connect();
@@ -672,8 +682,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     if (this.bucketRows && this.bucketRows.length > 0) {
       // Enhanced color palette
       const colors = [
-        [0.26, 0.50, 0.96], // Blue
-        [0.20, 0.73, 0.42], // Green
+        [0.26, 0.5, 0.96], // Blue
+        [0.2, 0.73, 0.42], // Green
         [0.95, 0.61, 0.07], // Orange
         [0.93, 0.31, 0.26], // Red
         [0.62, 0.31, 0.82], // Purple
@@ -765,7 +775,12 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
         // Background for label
         if (isActive) {
           cr.setSourceRGBA(color[0], color[1], color[2], 0.1);
-          cr.rectangle(labelX - 5, labelY - extents.height - 2, extents.width + 10, extents.height + 5);
+          cr.rectangle(
+            labelX - 5,
+            labelY - extents.height - 2,
+            extents.width + 10,
+            extents.height + 5
+          );
           cr.fill();
         }
 
@@ -797,8 +812,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
       const y = topPadding + graphHeight - brightness * graphHeight;
 
       const color = [
-        [0.26, 0.50, 0.96],
-        [0.20, 0.73, 0.42],
+        [0.26, 0.5, 0.96],
+        [0.2, 0.73, 0.42],
         [0.95, 0.61, 0.07],
         [0.93, 0.31, 0.26],
         [0.62, 0.31, 0.82],
@@ -839,7 +854,12 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
       } else {
         cr.setSourceRGB(1, 1, 1); // Fallback to white
       }
-      cr.rectangle(luxX - 5, luxY - luxExtents.height - 2, luxExtents.width + 10, luxExtents.height + 5);
+      cr.rectangle(
+        luxX - 5,
+        luxY - luxExtents.height - 2,
+        luxExtents.width + 10,
+        luxExtents.height + 5
+      );
       cr.fill();
 
       // Draw text
@@ -886,9 +906,6 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
   }
 
   _cleanupKeyboardBacklight() {
-    if (this.keyboardBacklightDbus) {
-      this.keyboardBacklightDbus.destroy();
-      this.keyboardBacklightDbus = null;
-    }
+    this.kbdBrightnessProxy = null;
   }
 }

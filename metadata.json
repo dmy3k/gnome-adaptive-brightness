@@ -7,7 +7,8 @@
   "url": "https://github.com/dmy3k/gnome-adaptive-brightness",
   "uuid": "adaptive-brightness@dmy3k.github.io",
   "donations": {
+    "github": "dmy3k",
     "buymeacoffee": "dm3k"
   },
-  "version": 16
+  "version": 17
 }

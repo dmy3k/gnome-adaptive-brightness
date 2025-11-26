@@ -13,6 +13,15 @@ export function loadInterfaceXML(iface) {
     </property>
   </interface>
 </node>`,
+    'org.gnome.SettingsDaemon.Power.Keyboard': `
+<node>
+  <interface name="org.gnome.SettingsDaemon.Power.Keyboard">
+    <property name="Brightness" type="i" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="Steps" type="i" access="read"/>
+  </interface>
+</node>`,
   };
 
   if (interfaces[iface]) {
