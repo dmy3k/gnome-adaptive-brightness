@@ -116,6 +116,8 @@ describe('AdaptiveBrightnessExtension', () => {
       dbus: {
         lightLevel: 100,
         hasAmbientLight: true,
+        claimLight: jest.fn().mockResolvedValue(undefined),
+        releaseLight: jest.fn(),
       },
       onLightLevelChanged: {
         add: jest.fn(),

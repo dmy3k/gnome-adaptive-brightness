@@ -67,6 +67,12 @@ export default class AdaptiveBrightnessExtension extends Extension {
       (lm, aboutToSuspend) => {
         // Pause processing brightness during transitions from/to suspend
         // Force an update on resume to handle lighting changes during sleep
+        // https://github.com/dmy3k/gnome-adaptive-brightness/issues/9
+        if (aboutToSuspend) {
+          this.sensorProxy.dbus.releaseLight();
+        } else {
+          this.sensorProxy.dbus.claimLight().catch(e => console.error(e));
+        }
         this.displayBrightness.paused = aboutToSuspend;
       }
     );
