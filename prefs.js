@@ -4,6 +4,10 @@ import Gtk from 'gi://Gtk';
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import { SensorProxyDbus } from './lib/SensorProxyDbus.js';
 import { BucketMapper } from './lib/BucketMapper.js';
+import { BrightnessGraphWidget } from './preferences/BrightnessGraphWidget.js';
+import { ConfigurationManager } from './preferences/ConfigurationManager.js';
+import { KeyboardBacklightTab } from './preferences/KeyboardBacklightTab.js';
+import { BucketOperations } from './preferences/BucketOperations.js';
 
 function loadInterfaceXML(iface) {
   let uri = `resource:///org/gnome/shell/dbus-interfaces/${iface}.xml`;
@@ -13,7 +17,7 @@ function loadInterfaceXML(iface) {
     let [ok_, bytes] = f.load_contents(null);
     return new TextDecoder().decode(bytes);
   } catch (e) {
-    console.error(`Failed to load D-Bus interface ${iface}`);
+    log(`Failed to load D-Bus interface ${iface}`);
   }
 
   return null;
@@ -23,497 +27,150 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
   fillPreferencesWindow(window) {
     const settings = this.getSettings();
 
-    // Bucket names for UI display
-    this.bucketNames = [
-      'Night',
-      'Very Dark to Dim Indoor',
-      'Dim to Normal Indoor',
-      'Normal to Bright Indoor',
-      'Bright Indoor to Outdoor',
-    ];
-
-    // Initialize sensor proxy for live preview
+    this.settings = settings;
     this.sensorProxy = new SensorProxyDbus();
     this._initSensorProxy();
 
-    // Initialize bucket mapper for hysteresis logic
-    this.bucketMapper = null;
+    this.bucketOps = new BucketOperations(settings);
+    this.configManager = new ConfigurationManager(settings, () => this._refreshBuckets());
+    this.keyboardTab = new KeyboardBacklightTab(settings, (min, max, brightness) =>
+      this.bucketOps.generateBucketName(min, max, brightness)
+    );
 
-    // Clean up on window close
+    this.bucketMapper = null;
+    this.activeBucketIndex = -1;
+    this.currentLux = null;
+
     window.connect('close-request', () => {
       this._cleanupSensorProxy();
       this._cleanupKeyboardBacklight();
+      if (this._keyboardBucketsListenerId) {
+        settings.disconnect(this._keyboardBucketsListenerId);
+        this._keyboardBucketsListenerId = null;
+      }
+      // Clean up all properties
+      this.settings = null;
+      this.bucketOps = null;
+      this.configManager = null;
+      this.keyboardTab = null;
+      this.graphWidget = null;
+      this.bucketMapper = null;
+      this.activeBucketIndex = -1;
+      this.currentLux = null;
       return false;
     });
 
-    // Read buckets from GSettings (shared across pages)
-    const bucketsVariant = settings.get_value('brightness-buckets');
-    const buckets = [];
-    for (let i = 0; i < bucketsVariant.n_children(); i++) {
-      const tuple = bucketsVariant.get_child_value(i);
-      buckets.push({
-        name: this.bucketNames[i] || `Bucket ${i + 1}`,
-        min: tuple.get_child_value(0).get_uint32(),
-        max: tuple.get_child_value(1).get_uint32(),
-        brightness: tuple.get_child_value(2).get_double(),
-      });
-    }
-
-    // Initialize bucket mapper with current buckets for hysteresis
+    const buckets = this.bucketOps.loadBucketsFromSettings();
     this.bucketMapper = new BucketMapper(buckets);
 
-    // Create Display page (first/default)
-    this._createCalibrationPage(window, settings, buckets);
+    settings.connect('changed::brightness-buckets', () => {
+      if (this.graphWidget?.getSkipNextSettingsUpdate()) {
+        this.graphWidget.clearSkipNextSettingsUpdate();
+        return;
+      }
 
-    // Create Preview page
+      if (this.graphWidget?.isDragging()) {
+        return;
+      }
+
+      const updatedBuckets = this.bucketOps.loadBucketsFromSettings();
+      this.bucketMapper = new BucketMapper(updatedBuckets);
+      this.graphWidget?.setBucketMapper(this.bucketMapper);
+    });
+
     this._createInspectorPage(window, settings, buckets);
 
-    // Initialize keyboard backlight D-Bus for available levels
     const KeyboardBrightnessInterface = loadInterfaceXML('org.gnome.SettingsDaemon.Power.Keyboard');
     const KeyboardBrightnessProxy = Gio.DBusProxy.makeProxyWrapper(KeyboardBrightnessInterface);
-
-    // Create Keyboard Backlight page
     new KeyboardBrightnessProxy(
       Gio.DBus.session,
       'org.gnome.SettingsDaemon.Power',
       '/org/gnome/SettingsDaemon/Power',
       (proxy, error) => {
-        if (error) {
-          console.error(error);
-        } else {
-          this.kbdBrightnessProxy = proxy;
+        if (!error) {
+          this.keyboardTab.setKeyboardBrightnessProxy(proxy);
         }
-        this._createKeyboardBacklightPage(window, settings, buckets);
+        this.keyboardTab.createPage(window, buckets);
+
+        this._keyboardBucketsListenerId = settings.connect('changed::brightness-buckets', () => {
+          this.keyboardTab.updateKeyboardTab();
+        });
       }
     );
-
   }
 
   _createInspectorPage(window, settings, buckets) {
     const page = new Adw.PreferencesPage({
-      title: 'Preview',
-      icon_name: 'view-reveal-symbolic',
+      title: 'Brightness',
+      icon_name: 'display-brightness-symbolic',
     });
     window.add(page);
 
-    // Create a graph preview group at the top
     const graphGroup = new Adw.PreferencesGroup({
-      title: 'Brightness Response Curve',
-      description: 'Visual representation of how brightness responds to ambient light levels.',
+      title: 'Brightness Curve',
+      description: 'Current sensor value and brightness mapping',
     });
     page.add(graphGroup);
 
-    // Add curve preview graph
-    this.curvePreview = this._createCurvePreview();
-    graphGroup.add(this.curvePreview);
-  }
+    this.graphWidget = new BrightnessGraphWidget(
+      (min, max, brightness) => this.bucketOps.generateBucketName(min, max, brightness),
+      (buckets) => this.bucketOps.saveBucketsToSettings(buckets)
+    );
+    this.graphWidget.setBucketMapper(this.bucketMapper);
 
-  _createCalibrationPage(window, settings, buckets) {
-    const page = new Adw.PreferencesPage({
-      title: 'Display',
-      icon_name: 'preferences-desktop-display-symbolic',
-    });
-    window.add(page);
+    graphGroup.add(this.graphWidget.getWidget());
 
-    // Create a brightness curves group
-    const curvesGroup = new Adw.PreferencesGroup({
-      title: 'Brightness Levels',
-      description: 'Adjust how your screen brightness responds to different lighting conditions.',
+    const configGroup = new Adw.PreferencesGroup({});
+    page.add(configGroup);
+
+    const configRow = new Adw.ActionRow({
+      title: 'Configuration',
+      subtitle: 'Import or export brightness settings',
     });
 
-    page.add(curvesGroup);
-
-    // Create UI rows for each bucket
-    this.bucketRows = [];
-    buckets.forEach((bucket, index) => {
-      const expanderRow = this._createBucketExpanderRow(bucket, index, settings);
-
-      // Add accordion behavior - only one expander open at a time
-      expanderRow.connect('notify::expanded', () => {
-        if (expanderRow.expanded) {
-          // Close all other expanders when this one opens
-          this.bucketRows.forEach((otherRow) => {
-            if (otherRow !== expanderRow && otherRow.expanded) {
-              otherRow.expanded = false;
-            }
-          });
-        }
-      });
-
-      this.bucketRows.push(expanderRow);
-      curvesGroup.add(expanderRow);
+    const buttonBox = new Gtk.Box({
+      orientation: Gtk.Orientation.HORIZONTAL,
+      spacing: 6,
+      valign: Gtk.Align.CENTER,
     });
 
-    // Set initial constraints based on bucket configuration
-    this._updateBucketConstraints();
-
-    // Add reset button centered below the group
-    const resetButton = new Gtk.Button({
-      label: 'Reset to Defaults',
-      halign: Gtk.Align.CENTER,
-      margin_top: 20,
-      margin_bottom: 12,
-      css_classes: ['pill'],
+    const exportButton = new Gtk.Button({
+      icon_name: 'document-save-symbolic',
+      tooltip_text: 'Export configuration',
+      valign: Gtk.Align.CENTER,
     });
-
-    resetButton.connect('clicked', () => {
-      settings.reset('brightness-buckets');
-
-      // Reload bucket values from settings and update UI
-      const bucketsVariant = settings.get_value('brightness-buckets');
-      for (let i = 0; i < bucketsVariant.n_children() && i < this.bucketRows.length; i++) {
-        const tuple = bucketsVariant.get_child_value(i);
-        const row = this.bucketRows[i];
-
-        const min = tuple.get_child_value(0).get_uint32();
-        const max = tuple.get_child_value(1).get_uint32();
-        const brightness = tuple.get_child_value(2).get_double();
-
-        // Update spin row values
-        row._minLuxRow.set_value(min);
-        row._maxLuxRow.set_value(max);
-        row._brightnessRow.set_value(Math.round(brightness * 100));
-
-        // Update subtitle
-        row.subtitle = `${min}–${max} lux → ${Math.round(brightness * 100)}% brightness`;
-      }
-
-      // Update bucket mapper and redraw
-      this._updateBucketMapper();
-      this._updateBucketConstraints();
-      if (this.drawingArea) {
-        this.drawingArea.queue_draw();
-      }
+    exportButton.connect('clicked', () => {
+      this.configManager.exportConfiguration(window);
     });
+    buttonBox.append(exportButton);
 
-    curvesGroup.add(resetButton);
-  }
-
-  _createKeyboardBacklightPage(window, settings, buckets) {
-    const page = new Adw.PreferencesPage({
-      title: 'Keyboard',
-      icon_name: 'input-keyboard-symbolic',
+    const importButton = new Gtk.Button({
+      icon_name: 'document-open-symbolic',
+      tooltip_text: 'Import configuration',
+      valign: Gtk.Align.CENTER,
     });
-    window.add(page);
-
-    // Create a keyboard backlight group
-    const keyboardGroup = new Adw.PreferencesGroup({
-      title: 'Automatic Keyboard Backlight',
-      description:
-        'Select keyboard backlight level for each brightness range. Set to "Off" to disable backlight for that range.',
+    importButton.connect('clicked', () => {
+      this.configManager.importConfiguration(window);
     });
-    page.add(keyboardGroup);
+    buttonBox.append(importButton);
 
-    // Get current keyboard backlight level settings
-    const keyboardLevelsVariant = settings.get_value('keyboard-backlight-levels');
-    const backlightLevels = [];
-    for (let i = 0; i < keyboardLevelsVariant.n_children(); i++) {
-      backlightLevels.push(keyboardLevelsVariant.get_child_value(i).get_uint32());
-    }
+    configRow.add_suffix(buttonBox);
+    configGroup.add(configRow);
 
-    // Get available backlight levels from hardware
-    const availableLevels = this.kbdBrightnessProxy?.Steps;
-
-    // Create dropdown rows for each bucket
-    this.keyboardDropdowns = [];
-    buckets.forEach((bucket, index) => {
-      const currentLevel = backlightLevels[index] ?? 0;
-
-      const comboRow = new Adw.ComboRow({
-        title: bucket.name,
-      });
-
-      // Create string list model for dropdown options
-      const model = new Gtk.StringList();
-      for (let level = 1; level <= availableLevels; level++) {
-        if (level === 1) {
-          model.append('Off');
-        } else if (availableLevels === 2) {
-          // Single level devices (on/off only)
-          model.append('On');
-        } else if (availableLevels === 3) {
-          // Two level devices (common case)
-          model.append(level === 2 ? 'Low' : 'High');
-        } else {
-          // Multi-level devices (3+ levels)
-          if (level === 2) {
-            model.append('Low');
-          } else if (level === availableLevels) {
-            model.append('High');
-          } else {
-            model.append(`Medium${availableLevels > 3 ? ' ' + level : ''}`);
-          }
-        }
-      }
-
-      comboRow.set_model(model);
-      comboRow.set_selected(currentLevel);
-
-      comboRow.connect('notify::selected', () => {
-        this._saveKeyboardBacklightLevels(settings);
-      });
-
-      this.keyboardDropdowns.push({ comboRow, bucketIndex: index });
-      keyboardGroup.add(comboRow);
+    const resetRow = new Adw.ActionRow({
+      title: 'Reset to Defaults',
+      subtitle: 'Restore the default brightness configuration',
+      activatable: true,
     });
-
-    // Create idle timeout group
-    const timeoutGroup = new Adw.PreferencesGroup({});
-    page.add(timeoutGroup);
-
-    // Create a spin row for idle timeout
-    const idleTimeoutRow = new Adw.SpinRow({
-      title: 'Idle Timeout',
-      subtitle: 'Turn off keyboard backlight after inactivity (seconds)',
-      adjustment: new Gtk.Adjustment({
-        lower: 5,
-        upper: 60,
-        step_increment: 5,
-        page_increment: 10,
-      }),
+    const resetIcon = new Gtk.Image({
+      icon_name: 'view-refresh-symbolic',
+      valign: Gtk.Align.CENTER,
     });
-    timeoutGroup.add(idleTimeoutRow);
-
-    // Bind the spin row to the setting
-    settings.bind('keyboard-idle-timeout', idleTimeoutRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-  }
-
-  _createBucketExpanderRow(bucket, index, settings) {
-    const percentBrightness = Math.round(bucket.brightness * 100); // 0-1.0 scale -> 0-100%
-    const expanderRow = new Adw.ExpanderRow({
-      title: bucket.name,
-      subtitle: `${bucket.min}–${bucket.max} lux → ${percentBrightness}% brightness`,
+    resetRow.add_suffix(resetIcon);
+    resetRow.connect('activated', () => {
+      this._resetBuckets();
     });
-
-    // Store references for validation
-    expanderRow._bucketIndex = index;
-    expanderRow._settings = settings;
-    expanderRow._bucketName = bucket.name;
-
-    // Min Lux SpinRow
-    const minLuxRow = new Adw.SpinRow({
-      title: 'Minimum Lux',
-      subtitle: 'Lower bound of light level range',
-      tooltip_text: 'Ambient light level where this brightness bucket becomes active',
-      adjustment: new Gtk.Adjustment({
-        lower: 0,
-        upper: 10000,
-        step_increment: 10,
-        page_increment: 100,
-        value: bucket.min,
-      }),
-      digits: 0,
-    });
-    minLuxRow.connect('changed', () => {
-      this._onBucketValueChanged(expanderRow, minLuxRow, maxLuxRow, brightnessRow);
-    });
-    expanderRow.add_row(minLuxRow);
-
-    // Max Lux SpinRow
-    const maxLuxRow = new Adw.SpinRow({
-      title: 'Maximum Lux',
-      subtitle: 'Upper bound of light level range',
-      tooltip_text: 'Ambient light level where this brightness bucket becomes inactive',
-      adjustment: new Gtk.Adjustment({
-        lower: 0,
-        upper: 10000,
-        step_increment: 10,
-        page_increment: 100,
-        value: bucket.max,
-      }),
-      digits: 0,
-    });
-    maxLuxRow.connect('changed', () => {
-      this._onBucketValueChanged(expanderRow, minLuxRow, maxLuxRow, brightnessRow);
-    });
-    expanderRow.add_row(maxLuxRow);
-
-    // Brightness SpinRow (0-100%, maps to 0-1.0 internally)
-    const brightnessRow = new Adw.SpinRow({
-      title: 'Target Brightness',
-      subtitle: 'Screen brightness percentage',
-      tooltip_text: 'Brightness level to apply when in this light range',
-      adjustment: new Gtk.Adjustment({
-        lower: 0,
-        upper: 100,
-        step_increment: 1,
-        page_increment: 5,
-        value: percentBrightness,
-      }),
-      digits: 0,
-    });
-    brightnessRow.connect('changed', () => {
-      this._onBucketValueChanged(expanderRow, minLuxRow, maxLuxRow, brightnessRow);
-    });
-    expanderRow.add_row(brightnessRow);
-
-    // Store widget references
-    expanderRow._minLuxRow = minLuxRow;
-    expanderRow._maxLuxRow = maxLuxRow;
-    expanderRow._brightnessRow = brightnessRow;
-
-    return expanderRow;
-  }
-
-  _onBucketValueChanged(expanderRow, minLuxRow, maxLuxRow, brightnessRow) {
-    // Update subtitle
-    const minLux = minLuxRow.get_value();
-    const maxLux = maxLuxRow.get_value();
-    const brightness = brightnessRow.get_value();
-    expanderRow.subtitle = `${minLux}–${maxLux} lux → ${brightness}% brightness`;
-
-    // Update constraints for all buckets based on new values
-    this._updateBucketConstraints();
-
-    // Save buckets
-    this._saveBuckets();
-
-    // Update bucket mapper with new configuration
-    this._updateBucketMapper();
-
-    // Redraw curve preview
-    if (this.drawingArea) {
-      this.drawingArea.queue_draw();
-    }
-  }
-
-  _updateBucketMapper() {
-    if (!this.bucketRows) return;
-
-    const buckets = this.bucketRows.map((row) => ({
-      min: row._minLuxRow.get_value(),
-      max: row._maxLuxRow.get_value(),
-      brightness: row._brightnessRow.get_value() / 100,
-    }));
-
-    this.bucketMapper = new BucketMapper(buckets);
-  }
-
-  _updateBucketConstraints() {
-    if (!this.bucketRows) return;
-
-    for (let i = 0; i < this.bucketRows.length; i++) {
-      const row = this.bucketRows[i];
-      const minLuxRow = row._minLuxRow;
-      const maxLuxRow = row._maxLuxRow;
-
-      const currentMin = minLuxRow.get_value();
-      const currentMax = maxLuxRow.get_value();
-
-      // Determine constraints based on neighboring buckets
-      let minLowerBound = 0;
-      let minUpperBound = currentMax - 1; // Must be less than own max
-      let maxLowerBound = currentMin + 1; // Must be greater than own min
-      let maxUpperBound = 10000;
-
-      // Previous bucket constraint: current min must be >= previous min
-      if (i > 0) {
-        const prevRow = this.bucketRows[i - 1];
-        const prevMin = prevRow._minLuxRow.get_value();
-        const prevMax = prevRow._maxLuxRow.get_value();
-
-        // Current min must be after previous min (to ensure proper ordering)
-        minLowerBound = Math.max(minLowerBound, prevMin + 1);
-
-        // Current min must be before previous max (to ensure overlap)
-        minUpperBound = Math.min(minUpperBound, prevMax - 1);
-
-        // Current max must be after previous max (to ensure progression)
-        maxLowerBound = Math.max(maxLowerBound, prevMax + 1);
-      }
-
-      // Next bucket constraint: current max must overlap next min
-      if (i < this.bucketRows.length - 1) {
-        const nextRow = this.bucketRows[i + 1];
-        const nextMin = nextRow._minLuxRow.get_value();
-        const nextMax = nextRow._maxLuxRow.get_value();
-
-        // Current max must be after next min (to ensure overlap)
-        maxLowerBound = Math.max(maxLowerBound, nextMin + 1);
-
-        // Current max must be before next max (to ensure proper ordering)
-        maxUpperBound = Math.min(maxUpperBound, nextMax - 1);
-
-        // Current min must be before next min (to ensure proper ordering)
-        minUpperBound = Math.min(minUpperBound, nextMin - 1);
-      }
-
-      // Update adjustments with new bounds
-      const minAdjustment = minLuxRow.get_adjustment();
-      minAdjustment.set_lower(minLowerBound);
-      minAdjustment.set_upper(minUpperBound);
-
-      const maxAdjustment = maxLuxRow.get_adjustment();
-      maxAdjustment.set_lower(maxLowerBound);
-      maxAdjustment.set_upper(maxUpperBound);
-
-      // Clamp current values to new bounds if needed
-      if (currentMin < minLowerBound) {
-        minLuxRow.set_value(minLowerBound);
-      } else if (currentMin > minUpperBound) {
-        minLuxRow.set_value(minUpperBound);
-      }
-
-      if (currentMax < maxLowerBound) {
-        maxLuxRow.set_value(maxLowerBound);
-      } else if (currentMax > maxUpperBound) {
-        maxLuxRow.set_value(maxUpperBound);
-      }
-    }
-  }
-
-  _validateBuckets() {
-    // No longer needed - constraints prevent invalid values
-    return true;
-  }
-
-  _saveBuckets() {
-    const settings = this.bucketRows[0]?._settings;
-    if (!settings) {
-      console.error('[Prefs] No settings object in bucketRows for _saveBuckets');
-      return;
-    }
-
-    // Build array of tuples for GSettings
-    const GLib = imports.gi.GLib;
-    const tuples = [];
-
-    for (let i = 0; i < this.bucketRows.length; i++) {
-      const row = this.bucketRows[i];
-      const minLux = row._minLuxRow.get_value();
-      const maxLux = row._maxLuxRow.get_value();
-      const brightness = row._brightnessRow.get_value() / 100; // Convert 0-100% to 0-1.0
-
-      tuples.push([minLux, maxLux, brightness]);
-    }
-
-    try {
-      const variant = new GLib.Variant('a(uud)', tuples);
-      settings.set_value('brightness-buckets', variant);
-    } catch (e) {
-      console.error('[Prefs] Error saving buckets:', e.message);
-    }
-  }
-
-  _saveKeyboardBacklightLevels(settings) {
-    if (!settings) {
-      console.error('[Prefs] No settings object provided to _saveKeyboardBacklightLevels');
-      return;
-    }
-
-    // Build array of backlight levels for each bucket
-    const GLib = imports.gi.GLib;
-    const levels = this.keyboardDropdowns.map((item) => item.comboRow.get_selected());
-
-    const variant = new GLib.Variant('au', levels);
-    settings.set_value('keyboard-backlight-levels', variant);
-  }
-
-  _updateExpanderSubtitle(expanderRow, minLuxRow, maxLuxRow, brightnessRow) {
-    const minLux = minLuxRow.get_value();
-    const maxLux = maxLuxRow.get_value();
-    const brightness = brightnessRow.get_value();
-    expanderRow.subtitle = `${minLux}–${maxLux} lux → ${brightness}% brightness`;
+    configGroup.add(resetRow);
   }
 
   async _initSensorProxy() {
@@ -526,15 +183,13 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
       await this.sensorProxy.claimLight();
 
-      // Initial update
       this._updateSensorDisplay();
 
-      // Listen for changes
       this._sensorSignalId = this.sensorProxy.onPropertiesChanged(() => {
         this._updateSensorDisplay();
       });
     } catch (error) {
-      console.error('Failed to initialize sensor proxy:', error);
+      log('Failed to initialize sensor proxy:', error);
     }
   }
 
@@ -543,353 +198,15 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
     if (currentLux === null || !this.bucketMapper) {
       this.activeBucketIndex = -1;
-      if (this.drawingArea) {
-        this.drawingArea.queue_draw();
-      }
+      this.graphWidget?.setCurrentLux(null, -1);
       return;
     }
 
-    // Use BucketMapper with hysteresis to determine active bucket
     this.bucketMapper.mapLuxToBrightness(currentLux, true);
     this.activeBucketIndex = this.bucketMapper.currentBucketIndex;
 
-    // Update current lux position and redraw graph
     this.currentLux = currentLux;
-    if (this.drawingArea) {
-      this.drawingArea.queue_draw();
-    }
-  }
-
-  _findActiveBucket(luxValue) {
-    for (let i = 0; i < this.bucketRows.length; i++) {
-      const row = this.bucketRows[i];
-      const minLux = row._minLuxRow.get_value();
-      const maxLux = row._maxLuxRow.get_value();
-
-      if (luxValue >= minLux && luxValue <= maxLux) {
-        return row._bucketName;
-      }
-    }
-    return null;
-  }
-
-  _createCurvePreview() {
-    const box = new Gtk.Box({
-      orientation: Gtk.Orientation.VERTICAL,
-      spacing: 0,
-    });
-
-    this.drawingArea = new Gtk.DrawingArea({
-      content_height: 350,
-      hexpand: true,
-      vexpand: true,
-    });
-
-    this.drawingArea.set_draw_func((area, cr, width, height) => {
-      this._drawCurve(cr, width, height);
-    });
-
-    box.append(this.drawingArea);
-
-    return box;
-  }
-
-  _drawCurve(cr, width, height) {
-    // HIG-compliant padding
-    const leftPadding = 40;
-    const rightPadding = 40;
-    const topPadding = 40;
-    const bottomPadding = 60;
-    const graphWidth = width - leftPadding - rightPadding;
-    const graphHeight = height - topPadding - bottomPadding;
-
-    // Get style context for theme colors
-    const styleContext = this.drawingArea.get_style_context();
-    const fgColor = styleContext.get_color();
-
-    // No background fill - fully transparent to blend with window
-
-    // Draw subtle grid lines
-    cr.setSourceRGBA(fgColor.red, fgColor.green, fgColor.blue, 0.06);
-    cr.setLineWidth(1);
-
-    // Horizontal grid lines (5 lines for 0%, 25%, 50%, 75%, 100%)
-    for (let i = 0; i <= 4; i++) {
-      const y = topPadding + (i * graphHeight) / 4;
-      cr.moveTo(leftPadding, y);
-      cr.lineTo(leftPadding + graphWidth, y);
-      cr.stroke();
-    }
-
-    // Vertical grid lines at major lux markers
-    const luxMarkers = [10, 100, 1000, 10000];
-    for (const lux of luxMarkers) {
-      const x = leftPadding + this._luxToX(lux, graphWidth);
-      cr.moveTo(x, topPadding);
-      cr.lineTo(x, topPadding + graphHeight);
-      cr.stroke();
-    }
-
-    // Draw axes with theme foreground color
-    cr.setSourceRGBA(fgColor.red, fgColor.green, fgColor.blue, 0.15);
-    cr.setLineWidth(1.5);
-    cr.moveTo(leftPadding, topPadding);
-    cr.lineTo(leftPadding, topPadding + graphHeight); // Y-axis
-    cr.lineTo(leftPadding + graphWidth, topPadding + graphHeight); // X-axis
-    cr.stroke();
-
-    // Font sizes
-    const labelFontSize = 11;
-    const bucketLabelFontSize = 10;
-
-    // Draw Y-axis labels (brightness percentages)
-    cr.setSourceRGBA(fgColor.red, fgColor.green, fgColor.blue, 0.75);
-    cr.setFontSize(labelFontSize);
-    cr.selectFontFace('Sans', 0, 0);
-    for (let i = 0; i <= 4; i++) {
-      const brightness = (4 - i) * 0.25;
-      const y = topPadding + (i * graphHeight) / 4;
-      const text = `${Math.round(brightness * 100)}%`;
-      const extents = cr.textExtents(text);
-      cr.moveTo(leftPadding - extents.width - 12, y + extents.height / 2 - 1);
-      cr.showText(text);
-    }
-
-    // Draw X-axis labels (lux levels)
-    cr.setFontSize(labelFontSize);
-    cr.selectFontFace('Sans', 0, 0);
-    cr.setSourceRGBA(fgColor.red, fgColor.green, fgColor.blue, 0.75);
-    const allLuxMarkers = [0, 10, 100, 1000, 10000];
-    for (const lux of allLuxMarkers) {
-      const x = leftPadding + this._luxToX(lux, graphWidth);
-      const y = topPadding + graphHeight + 22;
-
-      let text;
-      if (lux === 0) {
-        text = '0';
-      } else if (lux >= 1000) {
-        text = `${lux / 1000}k`;
-      } else {
-        text = lux.toString();
-      }
-
-      const extents = cr.textExtents(text);
-      cr.moveTo(x - extents.width / 2, y);
-      cr.showText(text);
-    }
-
-    // Draw bucket segments with enhanced visuals
-    if (this.bucketRows && this.bucketRows.length > 0) {
-      // Enhanced color palette
-      const colors = [
-        [0.26, 0.5, 0.96], // Blue
-        [0.2, 0.73, 0.42], // Green
-        [0.95, 0.61, 0.07], // Orange
-        [0.93, 0.31, 0.26], // Red
-        [0.62, 0.31, 0.82], // Purple
-      ];
-
-      // First pass: Draw background segments for active bucket
-      if (this.activeBucketIndex >= 0 && this.activeBucketIndex < this.bucketRows.length) {
-        const row = this.bucketRows[this.activeBucketIndex];
-        const minLux = row._minLuxRow.get_value();
-        const maxLux = row._maxLuxRow.get_value();
-        const x1 = leftPadding + this._luxToX(minLux, graphWidth);
-        const x2 = leftPadding + this._luxToX(maxLux, graphWidth);
-        const color = colors[this.activeBucketIndex % colors.length];
-
-        // Draw subtle background highlight (simple version without gradient)
-        cr.setSourceRGBA(color[0], color[1], color[2], 0.05);
-        cr.rectangle(x1, topPadding, x2 - x1, graphHeight);
-        cr.fill();
-      }
-
-      // Second pass: Draw bucket lines with connections
-      for (let i = 0; i < this.bucketRows.length; i++) {
-        const row = this.bucketRows[i];
-        const minLux = row._minLuxRow.get_value();
-        const maxLux = row._maxLuxRow.get_value();
-        const brightness = row._brightnessRow.get_value() / 100;
-
-        const color = colors[i % colors.length];
-        const isActive = this.activeBucketIndex === i;
-
-        const x1 = leftPadding + this._luxToX(minLux, graphWidth);
-        const x2 = leftPadding + this._luxToX(maxLux, graphWidth);
-        const y = topPadding + graphHeight - brightness * graphHeight;
-
-        // Draw connecting line to next bucket (transition)
-        if (i < this.bucketRows.length - 1) {
-          const nextRow = this.bucketRows[i + 1];
-          const nextMinLux = nextRow._minLuxRow.get_value();
-          const nextBrightness = nextRow._brightnessRow.get_value() / 100;
-          const nextX = leftPadding + this._luxToX(nextMinLux, graphWidth);
-          const nextY = topPadding + graphHeight - nextBrightness * graphHeight;
-
-          // Draw transition line if there's a gap
-          if (maxLux < nextMinLux) {
-            cr.setLineWidth(1.5);
-            cr.setSourceRGBA(color[0], color[1], color[2], 0.25);
-            cr.setDash([3, 3], 0);
-            cr.moveTo(x2, y);
-            cr.lineTo(nextX, nextY);
-            cr.stroke();
-            cr.setDash([], 0);
-          }
-        }
-
-        // Draw outer glow for active bucket
-        if (isActive) {
-          cr.setLineWidth(12);
-          cr.setSourceRGBA(color[0], color[1], color[2], 0.12);
-          cr.setLineCap(1); // ROUND
-          cr.moveTo(x1, y);
-          cr.lineTo(x2, y);
-          cr.stroke();
-        }
-
-        // Draw main bucket line
-        cr.setLineWidth(isActive ? 4 : 3);
-        cr.setSourceRGBA(color[0], color[1], color[2], isActive ? 1.0 : 0.7);
-        cr.setLineCap(1); // ROUND
-        cr.moveTo(x1, y);
-        cr.lineTo(x2, y);
-        cr.stroke();
-
-        // Draw endpoint circles
-        const circleRadius = isActive ? 5 : 4;
-        cr.setSourceRGBA(color[0], color[1], color[2], isActive ? 1.0 : 0.8);
-        cr.arc(x1, y, circleRadius, 0, 2 * Math.PI);
-        cr.fill();
-        cr.arc(x2, y, circleRadius, 0, 2 * Math.PI);
-        cr.fill();
-
-        // Draw bucket name label
-        cr.setFontSize(bucketLabelFontSize);
-        cr.selectFontFace('Sans', 0, isActive ? 1 : 0); // Bold when active
-        const labelText = row._bucketName;
-        const extents = cr.textExtents(labelText);
-        const labelX = (x1 + x2) / 2 - extents.width / 2;
-        const labelY = y - 12;
-
-        // Background for label
-        if (isActive) {
-          cr.setSourceRGBA(color[0], color[1], color[2], 0.1);
-          cr.rectangle(
-            labelX - 5,
-            labelY - extents.height - 2,
-            extents.width + 10,
-            extents.height + 5
-          );
-          cr.fill();
-        }
-
-        cr.setSourceRGBA(color[0], color[1], color[2], isActive ? 1.0 : 0.75);
-        cr.moveTo(labelX, labelY);
-        cr.showText(labelText);
-
-        // Draw brightness value below the line (for active bucket)
-        if (isActive) {
-          cr.setFontSize(9);
-          cr.selectFontFace('Sans', 0, 0);
-          const brightnessText = `${Math.round(brightness * 100)}%`;
-          const brightnessExtents = cr.textExtents(brightnessText);
-          const brightnessX = (x1 + x2) / 2 - brightnessExtents.width / 2;
-          const brightnessY = y + 18;
-
-          cr.setSourceRGBA(color[0], color[1], color[2], 0.85);
-          cr.moveTo(brightnessX, brightnessY);
-          cr.showText(brightnessText);
-        }
-      }
-    }
-
-    // Draw current position indicator (enhanced)
-    if (this.currentLux !== null && this.currentLux !== undefined && this.activeBucketIndex >= 0) {
-      const row = this.bucketRows[this.activeBucketIndex];
-      const brightness = row._brightnessRow.get_value() / 100;
-      const x = leftPadding + this._luxToX(this.currentLux, graphWidth);
-      const y = topPadding + graphHeight - brightness * graphHeight;
-
-      const color = [
-        [0.26, 0.5, 0.96],
-        [0.2, 0.73, 0.42],
-        [0.95, 0.61, 0.07],
-        [0.93, 0.31, 0.26],
-        [0.62, 0.31, 0.82],
-      ][this.activeBucketIndex % 5];
-
-      // Pulsing outer glow
-      cr.setSourceRGBA(color[0], color[1], color[2], 0.2);
-      cr.arc(x, y, 11, 0, 2 * Math.PI);
-      cr.fill();
-
-      // Middle ring
-      cr.setSourceRGBA(color[0], color[1], color[2], 0.5);
-      cr.arc(x, y, 7, 0, 2 * Math.PI);
-      cr.fill();
-
-      // Inner circle
-      cr.setSourceRGBA(color[0], color[1], color[2], 1.0);
-      cr.arc(x, y, 5, 0, 2 * Math.PI);
-      cr.fill();
-
-      // White center
-      cr.setSourceRGBA(1, 1, 1, 0.95);
-      cr.arc(x, y, 2.5, 0, 2 * Math.PI);
-      cr.fill();
-
-      // Draw current lux value
-      cr.setFontSize(9);
-      cr.selectFontFace('Sans', 0, 1); // Bold
-      const luxText = `${Math.round(this.currentLux)} lux`;
-      const luxExtents = cr.textExtents(luxText);
-      const luxX = x - luxExtents.width / 2;
-      const luxY = topPadding - 8;
-
-      // Get theme background color for solid background
-      const bgColor = styleContext.lookup_color('view_bg_color')[1];
-      if (bgColor) {
-        cr.setSourceRGB(bgColor.red, bgColor.green, bgColor.blue);
-      } else {
-        cr.setSourceRGB(1, 1, 1); // Fallback to white
-      }
-      cr.rectangle(
-        luxX - 5,
-        luxY - luxExtents.height - 2,
-        luxExtents.width + 10,
-        luxExtents.height + 5
-      );
-      cr.fill();
-
-      // Draw text
-      cr.setSourceRGBA(color[0], color[1], color[2], 0.95);
-      cr.moveTo(luxX, luxY);
-      cr.showText(luxText);
-    }
-
-    // Draw current lux marker (vertical line)
-    if (this.currentLux !== null && this.currentLux !== undefined) {
-      cr.setLineWidth(1.5);
-      cr.setSourceRGBA(fgColor.red, fgColor.green, fgColor.blue, 0.25);
-      cr.setDash([6, 4], 0);
-      const x = leftPadding + this._luxToX(this.currentLux, graphWidth);
-      cr.moveTo(x, topPadding);
-      cr.lineTo(x, topPadding + graphHeight);
-      cr.stroke();
-      cr.setDash([], 0);
-    }
-  }
-
-  // Convert lux value to X coordinate (logarithmic scale)
-  _luxToX(lux, graphWidth) {
-    const maxLux = 10000;
-    // Use log scale but add offset to handle 0 and low values
-    // Map: 0 -> 0, 10 -> ~0.2, 100 -> ~0.4, 1000 -> ~0.6, 10000 -> 1.0
-    const offset = 1;
-    const safeLux = Math.max(0, lux) + offset;
-    const maxWithOffset = maxLux + offset;
-    return (Math.log(safeLux) / Math.log(maxWithOffset)) * graphWidth;
+    this.graphWidget?.setCurrentLux(currentLux, this.activeBucketIndex);
   }
 
   _cleanupSensorProxy() {
@@ -907,5 +224,31 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
   _cleanupKeyboardBacklight() {
     this.kbdBrightnessProxy = null;
+  }
+
+  _resetBuckets() {
+    this.bucketOps.resetBuckets((bucketMapper) => {
+      this.bucketMapper = bucketMapper;
+      this.graphWidget?.setBucketMapper(bucketMapper);
+      this.keyboardTab?.updateKeyboardTab();
+    });
+  }
+
+  _refreshBuckets() {
+    const buckets = this.bucketOps.loadBucketsFromSettings(this.settings);
+    this.bucketMapper = new BucketMapper(buckets);
+    this.graphWidget?.setBucketMapper(this.bucketMapper);
+
+    // Update current state if we have lux data
+    if (this.currentLux !== null && this.bucketMapper) {
+      this.bucketMapper.mapLuxToBrightness(this.currentLux, true);
+      this.activeBucketIndex = this.bucketMapper.currentBucketIndex;
+      this.graphWidget?.setCurrentLux(this.currentLux, this.activeBucketIndex);
+    } else {
+      this.graphWidget?.redraw();
+    }
+
+    // Update keyboard tab with new buckets
+    this.keyboardTab?.updateKeyboardTab();
   }
 }
