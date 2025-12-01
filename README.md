@@ -4,8 +4,7 @@ GNOME Shell extension that automatically adjusts your screen brightness based on
 
 |                                           |                                           |
 | :---------------------------------------: | :---------------------------------------: |
-| ![Screenshots](.github/img/settings1.png) | ![Screenshots](.github/img/settings2.png) |
-| ![Screenshots](.github/img/settings3.png) |                                           |
+| ![Screenshots](.github/img/settings2.png) | ![Screenshots](.github/img/settings3.png) |
 
 # Background
 

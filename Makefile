@@ -1,5 +1,4 @@
 UUID = $(shell grep -oP '(?<="uuid": ")[^"]+' metadata.json)
-LIB_DIR = lib
 TESTS_DIR = tests
 SCHEMAS_DIR = schemas
 
@@ -14,7 +13,7 @@ compile-schemas:
 
 build: compile-schemas
 	@echo "Building extension..."
-	@gnome-extensions pack --force --extra-source=$(LIB_DIR) .
+	@gnome-extensions pack --force --extra-source=lib --extra-source=preferences .
 	@echo "Build complete: $(UUID).shell-extension.zip"
 
 install: build
