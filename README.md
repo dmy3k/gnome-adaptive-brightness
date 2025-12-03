@@ -17,7 +17,7 @@ This extension addresses some of the above with custom implementation:
 - **Improved Algorithm**: More stable under often changing light conditions
 - **Smooth Transitions**: Gradually changes brightness to avoid jarring jumps
 - **Customizable Brightness Curves**: Configure brightness response with an interactive graph-based UI
-- **Configuration Backup/Restore**: Export settings to JSON for backup, sharing, or manual editing to create custom brightness configurations.
+- **Configuration Backup/Restore**: Export settings to JSON for backup, sharing, or manual editing to create custom brightness configurations - [example](examples/win11-brightness-config.json).
 
 # Installation
 

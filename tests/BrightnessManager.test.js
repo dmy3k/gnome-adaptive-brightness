@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { BrightnessManager } from '../lib/BrightnessManager.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 
 describe('BrightnessManager', () => {
   let manager;
 
   beforeEach(() => {
     Main.resetBrightnessManager(true);
-    manager = new BrightnessManager();
+    Config.setPackageVersion('49.2'); // Default to 49.2 for testing
+    manager = new BrightnessManager(Main.brightnessManager);
   });
 
   afterEach(() => {
@@ -55,14 +57,13 @@ describe('BrightnessManager', () => {
       expect(secondId).toBeDefined();
     });
 
-    it('should setup globalScale listener when changed signal is emitted', () => {
+    it('should setup monitor scale listeners when changed signal is emitted', () => {
       manager.connect();
 
-      // Trigger the 'changed' signal which should set up globalScale listener
+      // Trigger the 'changed' signal which should set up monitor scale listeners
       Main.brightnessManager.emit('changed');
 
-      expect(manager._globalScaleSignalId).toBeDefined();
-      expect(typeof manager._globalScaleSignalId).toBe('number');
+      expect(manager._monitorScaleSignalIds.length).toBeGreaterThan(0);
     });
   });
 
@@ -218,7 +219,7 @@ describe('BrightnessManager', () => {
       manager.connect();
       Main.brightnessManager.emit('changed'); // Set up listeners
 
-      expect(manager._globalScaleSignalId).not.toBeNull();
+      // Monitor scale listeners should always be set up
       expect(manager._monitorScaleSignalIds.length).toBeGreaterThan(0);
 
       manager.destroy();
@@ -258,6 +259,127 @@ describe('BrightnessManager', () => {
       manager.destroy();
 
       expect(manager._manager).toBeNull();
+    });
+  });
+
+  describe('version-specific behavior', () => {
+    describe('GNOME 49.2+ (bias slider support)', () => {
+      beforeEach(() => {
+        Config.setPackageVersion('49.2');
+        Main.resetBrightnessManager(true);
+        manager = new BrightnessManager(Main.brightnessManager);
+      });
+
+      it('should detect GNOME 49.2+ and enable bias slider support', () => {
+        expect(manager._supportsBiasSlider).toBe(true);
+      });
+
+      it('should NOT setup globalScale value listener on GNOME 49.2+', () => {
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+
+        // globalScale listener should not be set up for bias slider versions
+        expect(manager._globalScaleSignalId).toBeNull();
+      });
+
+      it('should set monitor scales to neutral bias (0.5) on monitor change', () => {
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+
+        const scales = Main.brightnessManager.scales;
+        expect(scales.length).toBeGreaterThan(0);
+        for (const scale of scales) {
+          expect(scale.value).toBe(0.5);
+        }
+      });
+
+      it('should not trigger user preference callbacks', () => {
+        const callback = jest.fn();
+        manager.onUserPreferenceChange.add(callback);
+        
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+        
+        // Change globalScale value
+        Main.brightnessManager.globalScale.value = 0.8;
+        
+        // Callback should NOT be invoked on 49.2+
+        expect(callback).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('GNOME 49.0-49.1 (no bias slider)', () => {
+      beforeEach(() => {
+        Config.setPackageVersion('49.0');
+        Main.resetBrightnessManager(true);
+        manager = new BrightnessManager(Main.brightnessManager);
+      });
+
+      it('should detect GNOME 49.0 and disable bias slider support', () => {
+        expect(manager._supportsBiasSlider).toBe(false);
+      });
+
+      it('should setup globalScale value listener on GNOME 49.0', () => {
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+
+        // globalScale listener should be set up for non-bias slider versions
+        expect(manager._globalScaleSignalId).not.toBeNull();
+        expect(typeof manager._globalScaleSignalId).toBe('number');
+      });
+
+      it('should NOT set monitor scales to neutral bias', () => {
+        manager.connect();
+        
+        // Set scales to different values before triggering change
+        const scales = Main.brightnessManager.scales;
+        const originalValue = scales[0].value;
+        
+        Main.brightnessManager.emit('changed');
+
+        // On GNOME 49.0 (no bias slider), scales should NOT be reset to 0.5
+        // They keep their original values
+        expect(scales[0].value).toBe(originalValue);
+      });
+
+      it('should trigger user preference callbacks on globalScale changes', () => {
+        const callback = jest.fn();
+        manager.onUserPreferenceChange.add(callback);
+        
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+        
+        // Change globalScale value - this should trigger the callback
+        Main.brightnessManager.globalScale.value = 0.8;
+        
+        expect(callback).toHaveBeenCalledWith(0.8);
+      });
+    });
+
+    describe('GNOME 50+ (future versions)', () => {
+      beforeEach(() => {
+        Config.setPackageVersion('50.0');
+        Main.resetBrightnessManager(true);
+        manager = new BrightnessManager(Main.brightnessManager);
+      });
+
+      it('should detect GNOME 50+ and enable bias slider support', () => {
+        expect(manager._supportsBiasSlider).toBe(true);
+      });
+
+      it('should behave like GNOME 49.2+ for future versions', () => {
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+
+        // Should not set up globalScale listener
+        expect(manager._globalScaleSignalId).toBeNull();
+
+        // Should set neutral bias
+        const scales = Main.brightnessManager.scales;
+        for (const scale of scales) {
+          expect(scale.value).toBe(0.5);
+        }
+      });
     });
   });
 });
