@@ -1,7 +1,10 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
-import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {
+  ExtensionPreferences,
+  gettext as _,
+} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import { SensorProxyDbus } from './lib/SensorProxyDbus.js';
 import { BucketMapper } from './lib/BucketMapper.js';
 import { BrightnessGraphWidget } from './preferences/BrightnessGraphWidget.js';
@@ -24,6 +27,12 @@ function loadInterfaceXML(iface) {
 }
 
 export default class AdaptiveBrightnessPreferences extends ExtensionPreferences {
+  constructor(metadata) {
+    super(metadata);
+
+    this.initTranslations('adaptive-brightness@dmy3k.github.io');
+  }
+
   fillPreferencesWindow(window) {
     const settings = this.getSettings();
 
@@ -32,9 +41,11 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     this._initSensorProxy();
 
     this.bucketOps = new BucketOperations(settings);
-    this.configManager = new ConfigurationManager(settings, () => this._refreshBuckets());
-    this.keyboardTab = new KeyboardBacklightTab(settings, (min, max, brightness) =>
-      this.bucketOps.generateBucketName(min, max, brightness)
+    this.configManager = new ConfigurationManager(settings, () => this._refreshBuckets(), _);
+    this.keyboardTab = new KeyboardBacklightTab(
+      settings,
+      (min, max, brightness) => this.bucketOps.generateBucketName(min, max, brightness),
+      _
     );
 
     this.bucketMapper = null;
@@ -101,14 +112,14 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
   _createInspectorPage(window, settings, buckets) {
     const page = new Adw.PreferencesPage({
-      title: 'Brightness',
+      title: _('Brightness'),
       icon_name: 'display-brightness-symbolic',
     });
     window.add(page);
 
     const graphGroup = new Adw.PreferencesGroup({
-      title: 'Brightness Curve',
-      description: 'Current sensor value and brightness mapping',
+      title: _('Brightness Curve'),
+      description: _('Current sensor value and brightness mapping'),
     });
     page.add(graphGroup);
 
@@ -124,8 +135,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     page.add(configGroup);
 
     const configRow = new Adw.ActionRow({
-      title: 'Configuration',
-      subtitle: 'Import or export brightness settings',
+      title: _('Configuration'),
+      subtitle: _('Import or export brightness settings'),
     });
 
     const buttonBox = new Gtk.Box({
@@ -136,7 +147,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
     const exportButton = new Gtk.Button({
       icon_name: 'document-save-symbolic',
-      tooltip_text: 'Export configuration',
+      tooltip_text: _('Export configuration'),
       valign: Gtk.Align.CENTER,
     });
     exportButton.connect('clicked', () => {
@@ -146,7 +157,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
     const importButton = new Gtk.Button({
       icon_name: 'document-open-symbolic',
-      tooltip_text: 'Import configuration',
+      tooltip_text: _('Import configuration'),
       valign: Gtk.Align.CENTER,
     });
     importButton.connect('clicked', () => {
@@ -158,8 +169,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     configGroup.add(configRow);
 
     const resetRow = new Adw.ActionRow({
-      title: 'Reset to Defaults',
-      subtitle: 'Restore the default brightness configuration',
+      title: _('Reset to Defaults'),
+      subtitle: _('Restore the default brightness configuration'),
       activatable: true,
     });
     const resetIcon = new Gtk.Image({

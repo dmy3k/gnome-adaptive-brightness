@@ -2,8 +2,8 @@
 
 GNOME Shell extension that automatically adjusts your screen brightness based on ambient light conditions, helping to reduce eye strain and save energy. It also includes an optional keyboard backlight service that runs automatically based on ambient light.
 
-|                                           |                                           |
-| :---------------------------------------: | :---------------------------------------: |
+|                                          |                                           |
+| :--------------------------------------: | :---------------------------------------: |
 | ![Screenshots](.github/img/settings.gif) | ![Screenshots](.github/img/settings3.png) |
 
 # Background
@@ -91,6 +91,14 @@ ALS (ambient light sensor) is required for extension to operate. Some examples o
 - System76 Oryx Pro (oryp8 and newer)
 
 **Note:** Keyboard backlight control availability may vary. Most laptops with ambient light sensors support automatic keyboard backlight adjustment, but this depends on proper driver support in the Linux kernel. Check `ls /sys/class/leds/` for keyboard backlight interfaces.
+
+# Translation
+
+This extension supports internationalization (i18n) using gettext. All user-facing strings can be translated.
+
+### Contributing Translations
+
+We welcome translations to new languages! For detailed instructions, see [po/README.md](po/README.md) and [TRANSLATION.md](TRANSLATION.md).
 
 # References
 

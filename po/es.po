@@ -1,0 +1,293 @@
+# Spanish translation for Adaptive Brightness
+# Copyright (C) 2026
+# This file is distributed under the same license as the Adaptive Brightness package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: adaptive-brightness 1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/dmy3k/gnome-adaptive-brightness/issues\n"
+"POT-Creation-Date: 2026-01-29 12:00+0000\n"
+"PO-Revision-Date: 2026-01-29 12:00+0000\n"
+"Last-Translator: Example <example@example.com>\n"
+"Language-Team: Spanish\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: extension.js
+msgid "Adaptive Brightness Extension"
+msgstr "Extensión de Brillo Adaptativo"
+
+#: extension.js
+msgid "Ambient Light Sensor is not available. Extension will not function"
+msgstr "El sensor de luz ambiente no está disponible. La extensión no funcionará"
+
+#: extension.js
+msgid ""
+"GNOME's automatic brightness feature is enabled. Press to disable it in "
+"Settings → Power, allowing the extension to work properly."
+msgstr ""
+"La función de brillo automático de GNOME está habilitada. Presione para "
+"deshabilitarla en Configuración → Energía, permitiendo que la extensión funcione correctamente."
+
+#: extension.js
+msgid "Adaptive Brightness"
+msgstr "Brillo Adaptativo"
+
+#: extension.js
+msgid ""
+"Automatic brightness management is paused. Dismiss this notification to "
+"resume."
+msgstr ""
+"La gestión automática del brillo está en pausa. Cierre esta notificación para "
+"reanudar."
+
+#: extension.js
+msgid "Settings"
+msgstr "Configuración"
+
+#: prefs.js
+msgid "Brightness"
+msgstr "Brillo"
+
+#: prefs.js
+msgid "Brightness Curve"
+msgstr "Curva de Brillo"
+
+#: prefs.js
+msgid "Current sensor value and brightness mapping"
+msgstr "Valor actual del sensor y mapeo de brillo"
+
+#: prefs.js
+msgid "Configuration"
+msgstr "Configuración"
+
+#: prefs.js
+msgid "Import or export brightness settings"
+msgstr "Importar o exportar configuración de brillo"
+
+#: prefs.js
+msgid "Export configuration"
+msgstr "Exportar configuración"
+
+#: prefs.js
+msgid "Import configuration"
+msgstr "Importar configuración"
+
+#: prefs.js
+msgid "Reset to Defaults"
+msgstr "Restaurar valores predeterminados"
+
+#: prefs.js
+msgid "Restore the default brightness configuration"
+msgstr "Restaurar la configuración de brillo predeterminada"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Keyboard"
+msgstr "Teclado"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Automatic Keyboard Backlight"
+msgstr "Retroiluminación Automática del Teclado"
+
+#: preferences/KeyboardBacklightTab.js
+msgid ""
+"Select keyboard backlight level for each brightness range. Set to \"Off\" "
+"to disable backlight for that range."
+msgstr ""
+"Seleccione el nivel de retroiluminación del teclado para cada rango de brillo. "
+"Configure en \"Apagado\" para desactivar la retroiluminación para ese rango."
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Idle Timeout"
+msgstr "Tiempo de Inactividad"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Turn off keyboard backlight after inactivity (seconds)"
+msgstr "Apagar la retroiluminación del teclado después de inactividad (segundos)"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Off"
+msgstr "Apagado"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "On"
+msgstr "Encendido"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Low"
+msgstr "Bajo"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "High"
+msgstr "Alto"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Medium"
+msgstr "Medio"
+
+#: preferences/ConfigurationManager.js
+msgid "Export Configuration"
+msgstr "Exportar Configuración"
+
+#: preferences/ConfigurationManager.js
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: preferences/ConfigurationManager.js
+msgid "Export"
+msgstr "Exportar"
+
+#: preferences/ConfigurationManager.js
+msgid "JSON files"
+msgstr "Archivos JSON"
+
+#: preferences/ConfigurationManager.js
+msgid "Export Error"
+msgstr "Error de Exportación"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to export: %s"
+msgstr "Error al exportar: %s"
+
+#: preferences/ConfigurationManager.js
+msgid "Import Configuration"
+msgstr "Importar Configuración"
+
+#: preferences/ConfigurationManager.js
+msgid "Import"
+msgstr "Importar"
+
+#: preferences/ConfigurationManager.js
+msgid "Import Failed"
+msgstr "Importación Fallida"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to read the selected file."
+msgstr "Error al leer el archivo seleccionado."
+
+#: preferences/ConfigurationManager.js
+msgid "Import Error"
+msgstr "Error de Importación"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to import configuration: %s"
+msgstr "Error al importar la configuración: %s"
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Configuration"
+msgstr "Configuración Inválida"
+
+#: preferences/ConfigurationManager.js
+msgid "Missing or invalid brightness-buckets array."
+msgstr "Array de rangos de brillo faltante o inválido."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Count"
+msgstr "Cantidad de Rangos Inválida"
+
+#: preferences/ConfigurationManager.js
+msgid "Configuration has %d buckets. Must be between 5 and 20."
+msgstr "La configuración tiene %d rangos. Debe tener entre 5 y 20."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Format"
+msgstr "Formato de Rango Inválido"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d has invalid format. Expected [min, max, brightness] array."
+msgstr "El rango %d tiene formato inválido. Se espera array [min, max, brillo]."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Values"
+msgstr "Valores de Rango Inválidos"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d contains non-numeric values."
+msgstr "El rango %d contiene valores no numéricos."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Lux Range"
+msgstr "Rango de Lux Inválido"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: min=%d, max=%d. Must have 0 ≤ min < max ≤ 10000."
+msgstr "Rango %d: min=%d, max=%d. Debe tener 0 ≤ min < max ≤ 10000."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Brightness"
+msgstr "Brillo Inválido"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: brightness=%f. Must be between 0 and 1."
+msgstr "Rango %d: brillo=%f. Debe estar entre 0 y 1."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Order"
+msgstr "Orden de Rangos Inválido"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: min values must be strictly increasing."
+msgstr "Rango %d: los valores mínimos deben aumentar estrictamente."
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: max values must be strictly increasing."
+msgstr "Rango %d: los valores máximos deben aumentar estrictamente."
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket Gap Detected"
+msgstr "Brecha en Rangos Detectada"
+
+#: preferences/ConfigurationManager.js
+msgid ""
+"Bucket %d: min (%d) creates a gap with previous bucket's max (%d). Buckets "
+"must overlap or be continuous."
+msgstr ""
+"Rango %d: min (%d) crea una brecha con el max (%d) del rango anterior. Los rangos "
+"deben superponerse o ser continuos."
+
+#: preferences/ConfigurationManager.js
+msgid "Excessive Overlap"
+msgstr "Superposición Excesiva"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d overlaps too much (>90%%) with previous bucket."
+msgstr "El rango %d se superpone demasiado (>90%%) con el rango anterior."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Keyboard Settings"
+msgstr "Configuración de Teclado Inválida"
+
+#: preferences/ConfigurationManager.js
+msgid "keyboard-backlight-levels must be an array."
+msgstr "keyboard-backlight-levels debe ser un array."
+
+#: preferences/ConfigurationManager.js
+msgid "Mismatched Settings"
+msgstr "Configuraciones Incompatibles"
+
+#: preferences/ConfigurationManager.js
+msgid "Keyboard backlight levels count must match bucket count."
+msgstr "La cantidad de niveles de retroiluminación debe coincidir con la cantidad de rangos."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Keyboard Level"
+msgstr "Nivel de Teclado Inválido"
+
+#: preferences/ConfigurationManager.js
+msgid "Level %d: %d. Must be integer between 0 and 10."
+msgstr "Nivel %d: %d. Debe ser un entero entre 0 y 10."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Timeout"
+msgstr "Tiempo de Espera Inválido"
+
+#: preferences/ConfigurationManager.js
+msgid "Keyboard idle timeout must be between 5 and 60 seconds."
+msgstr "El tiempo de inactividad del teclado debe estar entre 5 y 60 segundos."
+
+#: preferences/ConfigurationManager.js
+msgid "OK"
+msgstr "Aceptar"

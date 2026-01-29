@@ -3,9 +3,10 @@ import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 
 export class ConfigurationManager {
-  constructor(settings, refreshBucketsCallback) {
+  constructor(settings, refreshBucketsCallback, gettext = (x) => x) {
     this.settings = settings;
     this.refreshBuckets = refreshBucketsCallback;
+    this._ = gettext;
   }
 
   exportConfiguration(window) {
@@ -31,19 +32,19 @@ export class ConfigurationManager {
     }
 
     const dialog = new Gtk.FileChooserDialog({
-      title: 'Export Configuration',
+      title: this._('Export Configuration'),
       action: Gtk.FileChooserAction.SAVE,
       transient_for: window,
       modal: true,
     });
 
-    dialog.add_button('Cancel', Gtk.ResponseType.CANCEL);
-    dialog.add_button('Export', Gtk.ResponseType.ACCEPT);
+    dialog.add_button(this._('Cancel'), Gtk.ResponseType.CANCEL);
+    dialog.add_button(this._('Export'), Gtk.ResponseType.ACCEPT);
 
     dialog.set_current_name('adaptive-brightness-config.json');
 
     const filter = new Gtk.FileFilter();
-    filter.set_name('JSON files');
+    filter.set_name(this._('JSON files'));
     filter.add_mime_type('application/json');
     filter.add_pattern('*.json');
     dialog.add_filter(filter);
@@ -57,7 +58,11 @@ export class ConfigurationManager {
           const jsonStr = JSON.stringify(config);
           GLib.file_set_contents(path, jsonStr);
         } catch (e) {
-          this._showErrorDialog(window, 'Export Error', `Failed to export: ${e.message}`);
+          this._showErrorDialog(
+            window,
+            this._('Export Error'),
+            this._('Failed to export: %s').format(e.message)
+          );
         }
       }
       dialog.destroy();
@@ -68,17 +73,17 @@ export class ConfigurationManager {
 
   importConfiguration(window) {
     const dialog = new Gtk.FileChooserDialog({
-      title: 'Import Configuration',
+      title: this._('Import Configuration'),
       action: Gtk.FileChooserAction.OPEN,
       transient_for: window,
       modal: true,
     });
 
-    dialog.add_button('Cancel', Gtk.ResponseType.CANCEL);
-    dialog.add_button('Import', Gtk.ResponseType.ACCEPT);
+    dialog.add_button(this._('Cancel'), Gtk.ResponseType.CANCEL);
+    dialog.add_button(this._('Import'), Gtk.ResponseType.ACCEPT);
 
     const filter = new Gtk.FileFilter();
-    filter.set_name('JSON files');
+    filter.set_name(this._('JSON files'));
     filter.add_mime_type('application/json');
     filter.add_pattern('*.json');
     dialog.add_filter(filter);
@@ -91,7 +96,11 @@ export class ConfigurationManager {
         try {
           const [success, contents] = GLib.file_get_contents(path);
           if (!success) {
-            this._showErrorDialog(window, 'Import Failed', 'Failed to read the selected file.');
+            this._showErrorDialog(
+              window,
+              this._('Import Failed'),
+              this._('Failed to read the selected file.')
+            );
             dialog.destroy();
             return;
           }
@@ -123,8 +132,8 @@ export class ConfigurationManager {
         } catch (e) {
           this._showErrorDialog(
             window,
-            'Import Error',
-            `Failed to import configuration: ${e.message}`
+            this._('Import Error'),
+            this._('Failed to import configuration: %s').format(e.message)
           );
         }
       }
@@ -138,8 +147,8 @@ export class ConfigurationManager {
     if (!config['brightness-buckets'] || !Array.isArray(config['brightness-buckets'])) {
       this._showErrorDialog(
         window,
-        'Invalid Configuration',
-        'Missing or invalid brightness-buckets array.'
+        this._('Invalid Configuration'),
+        this._('Missing or invalid brightness-buckets array.')
       );
       return false;
     }
@@ -147,8 +156,10 @@ export class ConfigurationManager {
     if (config['brightness-buckets'].length < 5 || config['brightness-buckets'].length > 20) {
       this._showErrorDialog(
         window,
-        'Invalid Bucket Count',
-        `Configuration has ${config['brightness-buckets'].length} buckets. Must be between 5 and 20.`
+        this._('Invalid Bucket Count'),
+        this._('Configuration has %d buckets. Must be between 5 and 20.').format(
+          config['brightness-buckets'].length
+        )
       );
       return false;
     }
@@ -159,8 +170,10 @@ export class ConfigurationManager {
       if (!Array.isArray(bucket) || bucket.length !== 3) {
         this._showErrorDialog(
           window,
-          'Invalid Bucket Format',
-          `Bucket ${i + 1} has invalid format. Expected [min, max, brightness] array.`
+          this._('Invalid Bucket Format'),
+          this._('Bucket %d has invalid format. Expected [min, max, brightness] array.').format(
+            i + 1
+          )
         );
         return false;
       }
@@ -170,8 +183,8 @@ export class ConfigurationManager {
       if (typeof min !== 'number' || typeof max !== 'number' || typeof brightness !== 'number') {
         this._showErrorDialog(
           window,
-          'Invalid Bucket Values',
-          `Bucket ${i + 1} contains non-numeric values.`
+          this._('Invalid Bucket Values'),
+          this._('Bucket %d contains non-numeric values.').format(i + 1)
         );
         return false;
       }
@@ -179,8 +192,12 @@ export class ConfigurationManager {
       if (min < 0 || max > 10000 || min >= max) {
         this._showErrorDialog(
           window,
-          'Invalid Lux Range',
-          `Bucket ${i + 1}: min=${min}, max=${max}. Must have 0 ≤ min < max ≤ 10000.`
+          this._('Invalid Lux Range'),
+          this._('Bucket %d: min=%d, max=%d. Must have 0 ≤ min < max ≤ 10000.').format(
+            i + 1,
+            min,
+            max
+          )
         );
         return false;
       }
@@ -188,8 +205,8 @@ export class ConfigurationManager {
       if (brightness < 0 || brightness > 1) {
         this._showErrorDialog(
           window,
-          'Invalid Brightness',
-          `Bucket ${i + 1}: brightness=${brightness}. Must be between 0 and 1.`
+          this._('Invalid Brightness'),
+          this._('Bucket %d: brightness=%f. Must be between 0 and 1.').format(i + 1, brightness)
         );
         return false;
       }
@@ -201,8 +218,8 @@ export class ConfigurationManager {
         if (min <= prevBucket[0]) {
           this._showErrorDialog(
             window,
-            'Invalid Bucket Order',
-            `Bucket ${i + 1}: min values must be strictly increasing.`
+            this._('Invalid Bucket Order'),
+            this._('Bucket %d: min values must be strictly increasing.').format(i + 1)
           );
           return false;
         }
@@ -210,8 +227,8 @@ export class ConfigurationManager {
         if (max <= prevMax) {
           this._showErrorDialog(
             window,
-            'Invalid Bucket Order',
-            `Bucket ${i + 1}: max values must be strictly increasing.`
+            this._('Invalid Bucket Order'),
+            this._('Bucket %d: max values must be strictly increasing.').format(i + 1)
           );
           return false;
         }
@@ -219,10 +236,10 @@ export class ConfigurationManager {
         if (min > prevMax) {
           this._showErrorDialog(
             window,
-            'Bucket Gap Detected',
-            `Bucket ${
-              i + 1
-            }: min (${min}) creates a gap with previous bucket's max (${prevMax}). Buckets must overlap or be continuous.`
+            this._('Bucket Gap Detected'),
+            this._(
+              "Bucket %d: min (%d) creates a gap with previous bucket's max (%d). Buckets must overlap or be continuous."
+            ).format(i + 1, min, prevMax)
           );
           return false;
         }
@@ -235,8 +252,8 @@ export class ConfigurationManager {
         if (overlap > prevRange * 0.9) {
           this._showErrorDialog(
             window,
-            'Excessive Overlap',
-            `Bucket ${i + 1} overlaps too much (>90%) with previous bucket.`
+            this._('Excessive Overlap'),
+            this._('Bucket %d overlaps too much (>90%%) with previous bucket.').format(i + 1)
           );
           return false;
         }
@@ -247,8 +264,8 @@ export class ConfigurationManager {
       if (!Array.isArray(config['keyboard-backlight-levels'])) {
         this._showErrorDialog(
           window,
-          'Invalid Keyboard Settings',
-          'keyboard-backlight-levels must be an array.'
+          this._('Invalid Keyboard Settings'),
+          this._('keyboard-backlight-levels must be an array.')
         );
         return false;
       }
@@ -256,8 +273,8 @@ export class ConfigurationManager {
       if (config['keyboard-backlight-levels'].length !== config['brightness-buckets'].length) {
         this._showErrorDialog(
           window,
-          'Mismatched Settings',
-          'Keyboard backlight levels count must match bucket count.'
+          this._('Mismatched Settings'),
+          this._('Keyboard backlight levels count must match bucket count.')
         );
         return false;
       }
@@ -267,8 +284,8 @@ export class ConfigurationManager {
         if (!Number.isInteger(level) || level < 0 || level > 10) {
           this._showErrorDialog(
             window,
-            'Invalid Keyboard Level',
-            `Level ${i + 1}: ${level}. Must be integer between 0 and 10.`
+            this._('Invalid Keyboard Level'),
+            this._('Level %d: %d. Must be integer between 0 and 10.').format(i + 1, level)
           );
           return false;
         }
@@ -283,8 +300,8 @@ export class ConfigurationManager {
       ) {
         this._showErrorDialog(
           window,
-          'Invalid Timeout',
-          'Keyboard idle timeout must be between 5 and 60 seconds.'
+          this._('Invalid Timeout'),
+          this._('Keyboard idle timeout must be between 5 and 60 seconds.')
         );
         return false;
       }
@@ -301,9 +318,9 @@ export class ConfigurationManager {
       body: message,
     });
 
-    errorDialog.add_response('ok', 'OK');
-    errorDialog.set_default_response('ok');
-    errorDialog.set_close_response('ok');
+    errorDialog.add_response(this._('OK'), this._('OK'));
+    errorDialog.set_default_response(this._('OK'));
+    errorDialog.set_close_response(this._('OK'));
 
     errorDialog.show();
   }
