@@ -3,9 +3,10 @@ import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
 export class KeyboardBacklightTab {
-  constructor(settings, generateBucketNameCallback) {
+  constructor(settings, generateBucketNameCallback, gettext = (x) => x) {
     this.settings = settings;
     this.generateBucketName = generateBucketNameCallback;
+    this._ = gettext;
     this.keyboardGroup = null;
     this.keyboardDropdowns = [];
     this.kbdBrightnessProxy = null;
@@ -17,15 +18,16 @@ export class KeyboardBacklightTab {
 
   createPage(window, buckets) {
     const page = new Adw.PreferencesPage({
-      title: 'Keyboard',
+      title: this._('Keyboard'),
       icon_name: 'input-keyboard-symbolic',
     });
     window.add(page);
 
     this.keyboardGroup = new Adw.PreferencesGroup({
-      title: 'Automatic Keyboard Backlight',
-      description:
-        'Select keyboard backlight level for each brightness range. Set to "Off" to disable backlight for that range.',
+      title: this._('Automatic Keyboard Backlight'),
+      description: this._(
+        'Select keyboard backlight level for each brightness range. Set to "Off" to disable backlight for that range.'
+      ),
     });
     page.add(this.keyboardGroup);
 
@@ -35,8 +37,8 @@ export class KeyboardBacklightTab {
     page.add(timeoutGroup);
 
     const idleTimeoutRow = new Adw.SpinRow({
-      title: 'Idle Timeout',
-      subtitle: 'Turn off keyboard backlight after inactivity (seconds)',
+      title: this._('Idle Timeout'),
+      subtitle: this._('Turn off keyboard backlight after inactivity (seconds)'),
       adjustment: new Gtk.Adjustment({
         lower: 5,
         upper: 60,
@@ -84,18 +86,18 @@ export class KeyboardBacklightTab {
       const model = new Gtk.StringList();
       for (let level = 1; level <= availableLevels; level++) {
         if (level === 1) {
-          model.append('Off');
+          model.append(this._('Off'));
         } else if (availableLevels === 2) {
-          model.append('On');
+          model.append(this._('On'));
         } else if (availableLevels === 3) {
-          model.append(level === 2 ? 'Low' : 'High');
+          model.append(level === 2 ? this._('Low') : this._('High'));
         } else {
           if (level === 2) {
-            model.append('Low');
+            model.append(this._('Low'));
           } else if (level === availableLevels) {
-            model.append('High');
+            model.append(this._('High'));
           } else {
-            model.append(`Medium${availableLevels > 3 ? ' ' + level : ''}`);
+            model.append(`${this._('Medium')}${availableLevels > 3 ? ' ' + level : ''}`);
           }
         }
       }

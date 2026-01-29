@@ -1,0 +1,292 @@
+# Swedish translation for Adaptive Brightness
+# Copyright (C) 2026
+# This file is distributed under the same license as the Adaptive Brightness package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: adaptive-brightness 1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/dmy3k/gnome-adaptive-brightness/issues\n"
+"POT-Creation-Date: 2026-01-29 12:00+0000\n"
+"PO-Revision-Date: 2026-01-29 12:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Swedish\n"
+"Language: sv\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: extension.js
+msgid "Adaptive Brightness Extension"
+msgstr "Adaptiv Ljusstyrka"
+
+#: extension.js
+msgid "Ambient Light Sensor is not available. Extension will not function"
+msgstr "Ljussensor ej tillgänglig. Tillägget fungerar inte"
+
+#: extension.js
+msgid ""
+"GNOME's automatic brightness feature is enabled. Press to disable it in "
+"Settings → Power, allowing the extension to work properly."
+msgstr ""
+"GNOMEs automatisk ljusstyrka är aktiverad. Tryck för att inaktivera den i "
+"Inställningar → Energi så att tillägget kan fungera."
+
+#: extension.js
+msgid "Adaptive Brightness"
+msgstr "Adaptiv Ljusstyrka"
+
+#: extension.js
+msgid ""
+"Automatic brightness management is paused. Dismiss this notification to "
+"resume."
+msgstr ""
+"Automatisk ljusstyrka är pausad. Stäng meddelandet för att fortsätta."
+
+#: extension.js
+msgid "Settings"
+msgstr "Inställningar"
+
+#: prefs.js
+msgid "Brightness"
+msgstr "Ljusstyrka"
+
+#: prefs.js
+msgid "Brightness Curve"
+msgstr "Ljusstyrkekurva"
+
+#: prefs.js
+msgid "Current sensor value and brightness mapping"
+msgstr "Aktuellt sensorvärde och ljusstyrkemappning"
+
+#: prefs.js
+msgid "Configuration"
+msgstr "Konfiguration"
+
+#: prefs.js
+msgid "Import or export brightness settings"
+msgstr "Importera eller exportera ljusstyrkeinställningar"
+
+#: prefs.js
+msgid "Export configuration"
+msgstr "Exportera konfiguration"
+
+#: prefs.js
+msgid "Import configuration"
+msgstr "Importera konfiguration"
+
+#: prefs.js
+msgid "Reset to Defaults"
+msgstr "Återställ"
+
+#: prefs.js
+msgid "Restore the default brightness configuration"
+msgstr "Återställ standardinställningar för ljusstyrka"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Keyboard"
+msgstr "Tangentbord"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Automatic Keyboard Backlight"
+msgstr "Automatisk Tangentbordsbelysning"
+
+#: preferences/KeyboardBacklightTab.js
+msgid ""
+"Select keyboard backlight level for each brightness range. Set to \"Off\" "
+"to disable backlight for that range."
+msgstr ""
+"Välj belysningsnivå för varje ljusstyrkeområde. Sätt till \"Av\" för att "
+"inaktivera belysning i området."
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Idle Timeout"
+msgstr "Inaktivitetstid"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Turn off keyboard backlight after inactivity (seconds)"
+msgstr "Stäng av tangentbordsbelysning efter inaktivitet (sekunder)"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Off"
+msgstr "Av"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "On"
+msgstr "På"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Low"
+msgstr "Låg"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "High"
+msgstr "Hög"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Medium"
+msgstr "Medel"
+
+#: preferences/ConfigurationManager.js
+msgid "Export Configuration"
+msgstr "Exportera konfiguration"
+
+#: preferences/ConfigurationManager.js
+msgid "Cancel"
+msgstr "Avbryt"
+
+#: preferences/ConfigurationManager.js
+msgid "Export"
+msgstr "Exportera"
+
+#: preferences/ConfigurationManager.js
+msgid "JSON files"
+msgstr "JSON-filer"
+
+#: preferences/ConfigurationManager.js
+msgid "Export Error"
+msgstr "Exportfel"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to export: %s"
+msgstr "Kunde inte exportera: %s"
+
+#: preferences/ConfigurationManager.js
+msgid "Import Configuration"
+msgstr "Importera konfiguration"
+
+#: preferences/ConfigurationManager.js
+msgid "Import"
+msgstr "Importera"
+
+#: preferences/ConfigurationManager.js
+msgid "Import Failed"
+msgstr "Import misslyckades"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to read the selected file."
+msgstr "Kunde inte läsa vald fil."
+
+#: preferences/ConfigurationManager.js
+msgid "Import Error"
+msgstr "Importfel"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to import configuration: %s"
+msgstr "Kunde inte importera konfiguration: %s"
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Configuration"
+msgstr "Ogiltig konfiguration"
+
+#: preferences/ConfigurationManager.js
+msgid "Missing or invalid brightness-buckets array."
+msgstr "Saknad eller ogiltig ljusstyrkeområdesmatris."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Count"
+msgstr "Ogiltigt antal områden"
+
+#: preferences/ConfigurationManager.js
+msgid "Configuration has %d buckets. Must be between 5 and 20."
+msgstr "Konfigurationen har %d områden. Måste vara mellan 5 och 20."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Format"
+msgstr "Ogiltigt områdesformat"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d has invalid format. Expected [min, max, brightness] array."
+msgstr "Område %d har ogiltigt format. Förväntar [min, max, ljusstyrka]."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Values"
+msgstr "Ogiltiga värden"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d contains non-numeric values."
+msgstr "Område %d innehåller icke-numeriska värden."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Lux Range"
+msgstr "Ogiltigt lux-område"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: min=%d, max=%d. Must have 0 ≤ min < max ≤ 10000."
+msgstr "Område %d: min=%d, max=%d. Måste ha 0 ≤ min < max ≤ 10000."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Brightness"
+msgstr "Ogiltig ljusstyrka"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: brightness=%f. Must be between 0 and 1."
+msgstr "Område %d: ljusstyrka=%f. Måste vara mellan 0 och 1."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Order"
+msgstr "Ogiltig områdesordning"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: min values must be strictly increasing."
+msgstr "Område %d: min-värden måste öka strikt."
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: max values must be strictly increasing."
+msgstr "Område %d: max-värden måste öka strikt."
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket Gap Detected"
+msgstr "Lucka upptäckt"
+
+#: preferences/ConfigurationManager.js
+msgid ""
+"Bucket %d: min (%d) creates a gap with previous bucket's max (%d). Buckets "
+"must overlap or be continuous."
+msgstr ""
+"Område %d: min (%d) skapar lucka mot föregående max (%d). Områden måste "
+"överlappa eller vara sammanhängande."
+
+#: preferences/ConfigurationManager.js
+msgid "Excessive Overlap"
+msgstr "För stor överlappning"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d overlaps too much (>90%%) with previous bucket."
+msgstr "Område %d överlappar för mycket (>90%%) med föregående område."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Keyboard Settings"
+msgstr "Ogiltiga tangentbordsinställningar"
+
+#: preferences/ConfigurationManager.js
+msgid "keyboard-backlight-levels must be an array."
+msgstr "keyboard-backlight-levels måste vara en matris."
+
+#: preferences/ConfigurationManager.js
+msgid "Mismatched Settings"
+msgstr "Inställningar matchar ej"
+
+#: preferences/ConfigurationManager.js
+msgid "Keyboard backlight levels count must match bucket count."
+msgstr "Antal belysningsnivåer måste matcha antal områden."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Keyboard Level"
+msgstr "Ogiltig tangentbordsnivå"
+
+#: preferences/ConfigurationManager.js
+msgid "Level %d: %d. Must be integer between 0 and 10."
+msgstr "Nivå %d: %d. Måste vara heltal mellan 0 och 10."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Timeout"
+msgstr "Ogiltig timeout"
+
+#: preferences/ConfigurationManager.js
+msgid "Keyboard idle timeout must be between 5 and 60 seconds."
+msgstr "Inaktivitetstid måste vara mellan 5 och 60 sekunder."
+
+#: preferences/ConfigurationManager.js
+msgid "OK"
+msgstr "OK"

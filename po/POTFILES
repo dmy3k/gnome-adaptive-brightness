@@ -1,0 +1,5 @@
+extension.js
+prefs.js
+lib/NotificationService.js
+preferences/KeyboardBacklightTab.js
+preferences/ConfigurationManager.js

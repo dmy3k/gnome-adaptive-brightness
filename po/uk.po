@@ -1,0 +1,292 @@
+# Ukrainian translation for Adaptive Brightness
+# Copyright (C) 2026
+# This file is distributed under the same license as the Adaptive Brightness package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: adaptive-brightness 1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/dmy3k/gnome-adaptive-brightness/issues\n"
+"POT-Creation-Date: 2026-01-29 12:00+0000\n"
+"PO-Revision-Date: 2026-01-29 12:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Ukrainian\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: extension.js
+msgid "Adaptive Brightness Extension"
+msgstr "Адаптивна яскравість"
+
+#: extension.js
+msgid "Ambient Light Sensor is not available. Extension will not function"
+msgstr "Датчик освітлення недоступний. Розширення не працюватиме"
+
+#: extension.js
+msgid ""
+"GNOME's automatic brightness feature is enabled. Press to disable it in "
+"Settings → Power, allowing the extension to work properly."
+msgstr ""
+"Автояскравість GNOME увімкнено. Натисніть, щоб вимкнути у "
+"Параметри → Живлення, дозволивши розширенню працювати."
+
+#: extension.js
+msgid "Adaptive Brightness"
+msgstr "Адаптивна яскравість"
+
+#: extension.js
+msgid ""
+"Automatic brightness management is paused. Dismiss this notification to "
+"resume."
+msgstr ""
+"Автояскравість призупинено. Закрийте це сповіщення для відновлення."
+
+#: extension.js
+msgid "Settings"
+msgstr "Параметри"
+
+#: prefs.js
+msgid "Brightness"
+msgstr "Яскравість"
+
+#: prefs.js
+msgid "Brightness Curve"
+msgstr "Крива яскравості"
+
+#: prefs.js
+msgid "Current sensor value and brightness mapping"
+msgstr "Поточне значення датчика та відповідність яскравості"
+
+#: prefs.js
+msgid "Configuration"
+msgstr "Конфігурація"
+
+#: prefs.js
+msgid "Import or export brightness settings"
+msgstr "Імпорт або експорт налаштувань яскравості"
+
+#: prefs.js
+msgid "Export configuration"
+msgstr "Експорт конфігурації"
+
+#: prefs.js
+msgid "Import configuration"
+msgstr "Імпорт конфігурації"
+
+#: prefs.js
+msgid "Reset to Defaults"
+msgstr "Скинути"
+
+#: prefs.js
+msgid "Restore the default brightness configuration"
+msgstr "Відновити типові налаштування яскравості"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Keyboard"
+msgstr "Клавіатура"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Automatic Keyboard Backlight"
+msgstr "Автопідсвітка клавіатури"
+
+#: preferences/KeyboardBacklightTab.js
+msgid ""
+"Select keyboard backlight level for each brightness range. Set to \"Off\" "
+"to disable backlight for that range."
+msgstr ""
+"Оберіть рівень підсвітки для кожного діапазону яскравості. Встановіть \"Вимк\", "
+"щоб вимкнути підсвітку для цього діапазону."
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Idle Timeout"
+msgstr "Час очікування"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Turn off keyboard backlight after inactivity (seconds)"
+msgstr "Вимкнути підсвітку клавіатури після неактивності (секунди)"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Off"
+msgstr "Вимк"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "On"
+msgstr "Увімк"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Low"
+msgstr "Низький"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "High"
+msgstr "Високий"
+
+#: preferences/KeyboardBacklightTab.js
+msgid "Medium"
+msgstr "Середній"
+
+#: preferences/ConfigurationManager.js
+msgid "Export Configuration"
+msgstr "Експорт конфігурації"
+
+#: preferences/ConfigurationManager.js
+msgid "Cancel"
+msgstr "Скасувати"
+
+#: preferences/ConfigurationManager.js
+msgid "Export"
+msgstr "Експорт"
+
+#: preferences/ConfigurationManager.js
+msgid "JSON files"
+msgstr "Файли JSON"
+
+#: preferences/ConfigurationManager.js
+msgid "Export Error"
+msgstr "Помилка експорту"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to export: %s"
+msgstr "Не вдалося експортувати: %s"
+
+#: preferences/ConfigurationManager.js
+msgid "Import Configuration"
+msgstr "Імпорт конфігурації"
+
+#: preferences/ConfigurationManager.js
+msgid "Import"
+msgstr "Імпорт"
+
+#: preferences/ConfigurationManager.js
+msgid "Import Failed"
+msgstr "Помилка імпорту"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to read the selected file."
+msgstr "Не вдалося прочитати обраний файл."
+
+#: preferences/ConfigurationManager.js
+msgid "Import Error"
+msgstr "Помилка імпорту"
+
+#: preferences/ConfigurationManager.js
+msgid "Failed to import configuration: %s"
+msgstr "Не вдалося імпортувати конфігурацію: %s"
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Configuration"
+msgstr "Невірна конфігурація"
+
+#: preferences/ConfigurationManager.js
+msgid "Missing or invalid brightness-buckets array."
+msgstr "Відсутній або невірний масив діапазонів яскравості."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Count"
+msgstr "Невірна кількість діапазонів"
+
+#: preferences/ConfigurationManager.js
+msgid "Configuration has %d buckets. Must be between 5 and 20."
+msgstr "Конфігурація має %d діапазонів. Має бути від 5 до 20."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Format"
+msgstr "Невірний формат діапазону"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d has invalid format. Expected [min, max, brightness] array."
+msgstr "Діапазон %d має невірний формат. Очікується [min, max, яскравість]."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Values"
+msgstr "Невірні значення"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d contains non-numeric values."
+msgstr "Діапазон %d містить нечислові значення."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Lux Range"
+msgstr "Невірний діапазон люкс"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: min=%d, max=%d. Must have 0 ≤ min < max ≤ 10000."
+msgstr "Діапазон %d: min=%d, max=%d. Має бути 0 ≤ min < max ≤ 10000."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Brightness"
+msgstr "Невірна яскравість"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: brightness=%f. Must be between 0 and 1."
+msgstr "Діапазон %d: яскравість=%f. Має бути від 0 до 1."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Bucket Order"
+msgstr "Невірний порядок діапазонів"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: min values must be strictly increasing."
+msgstr "Діапазон %d: min має строго зростати."
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d: max values must be strictly increasing."
+msgstr "Діапазон %d: max має строго зростати."
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket Gap Detected"
+msgstr "Виявлено прогалину"
+
+#: preferences/ConfigurationManager.js
+msgid ""
+"Bucket %d: min (%d) creates a gap with previous bucket's max (%d). Buckets "
+"must overlap or be continuous."
+msgstr ""
+"Діапазон %d: min (%d) створює прогалину з max (%d) попереднього. Діапазони "
+"мають перекриватися або бути безперервними."
+
+#: preferences/ConfigurationManager.js
+msgid "Excessive Overlap"
+msgstr "Надмірне перекриття"
+
+#: preferences/ConfigurationManager.js
+msgid "Bucket %d overlaps too much (>90%%) with previous bucket."
+msgstr "Діапазон %d надто перекривається (>90%%) з попереднім."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Keyboard Settings"
+msgstr "Невірні налаштування клавіатури"
+
+#: preferences/ConfigurationManager.js
+msgid "keyboard-backlight-levels must be an array."
+msgstr "keyboard-backlight-levels має бути масивом."
+
+#: preferences/ConfigurationManager.js
+msgid "Mismatched Settings"
+msgstr "Неузгоджені налаштування"
+
+#: preferences/ConfigurationManager.js
+msgid "Keyboard backlight levels count must match bucket count."
+msgstr "Кількість рівнів підсвітки має відповідати кількості діапазонів."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Keyboard Level"
+msgstr "Невірний рівень клавіатури"
+
+#: preferences/ConfigurationManager.js
+msgid "Level %d: %d. Must be integer between 0 and 10."
+msgstr "Рівень %d: %d. Має бути ціле число від 0 до 10."
+
+#: preferences/ConfigurationManager.js
+msgid "Invalid Timeout"
+msgstr "Невірний час очікування"
+
+#: preferences/ConfigurationManager.js
+msgid "Keyboard idle timeout must be between 5 and 60 seconds."
+msgstr "Час очікування має бути від 5 до 60 секунд."
+
+#: preferences/ConfigurationManager.js
+msgid "OK"
+msgstr "Гаразд"

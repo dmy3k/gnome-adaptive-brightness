@@ -1,19 +1,26 @@
 UUID = $(shell grep -oP '(?<="uuid": ")[^"]+' metadata.json)
 TESTS_DIR = tests
 SCHEMAS_DIR = schemas
+PO_DIR = po
 
-.PHONY: all build install uninstall enable disable test clean compile-schemas
+.PHONY: all build install uninstall enable disable test clean update-pot
 
 all: build
 
-compile-schemas:
-	@echo "Compiling GSettings schemas..."
-	@glib-compile-schemas $(SCHEMAS_DIR)/
-	@echo "Schemas compiled."
+update-pot:
+	@echo "Updating translation template..."
+	@xgettext --from-code=UTF-8 --output=$(PO_DIR)/$(UUID).pot \
+		--package-name="Adaptive Brightness" \
+		--package-version="1.0" \
+		--msgid-bugs-address="https://github.com/dmy3k/gnome-adaptive-brightness/issues" \
+		--keyword=_ \
+		--add-comments=TRANSLATORS \
+		extension.js prefs.js lib/*.js preferences/*.js
+	@echo "Translation template updated: $(PO_DIR)/$(UUID).pot"
 
-build: compile-schemas
+build:
 	@echo "Building extension..."
-	@gnome-extensions pack --force --extra-source=lib --extra-source=preferences .
+	@gnome-extensions pack --force --extra-source=lib --extra-source=preferences --podir=$(PO_DIR) .
 	@echo "Build complete: $(UUID).shell-extension.zip"
 
 install: build
@@ -39,6 +46,5 @@ test:
 
 clean:
 	@rm -f $(SCHEMAS_DIR)/*.compiled
-	@rm -f $(PO_DIR)/*.mo
 	@rm -f $(UUID).shell-extension.zip
 	@echo "Cleaned build artifacts."

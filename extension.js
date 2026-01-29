@@ -1,4 +1,4 @@
-import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import GLib from 'gi://GLib';
 import * as LoginManager from 'resource:///org/gnome/shell/misc/loginManager.js';
 import { NotificationService } from './lib/NotificationService.js';
@@ -8,13 +8,19 @@ import { BucketMapper } from './lib/BucketMapper.js';
 import { KeyboardBacklightService } from './lib/KeyboardBacklightService.js';
 
 export default class AdaptiveBrightnessExtension extends Extension {
+  constructor(metadata) {
+    super(metadata);
+
+    this.initTranslations('adaptive-brightness@dmy3k.github.io');
+  }
+
   enable() {
     this.settings = this.getSettings();
 
     const buckets = this._loadBucketsFromSettings();
     this.bucketMapper = new BucketMapper(buckets);
 
-    this.notifications = new NotificationService();
+    this.notifications = new NotificationService(_);
     this.displayBrightness = new DisplayBrightnessService();
     this.keyboardBacklight = new KeyboardBacklightService(this.settings);
 
@@ -95,8 +101,8 @@ export default class AdaptiveBrightnessExtension extends Extension {
   handleSensorAvailableChanged(val) {
     if (val === false) {
       this.notifications.showNotification(
-        'Adaptive Brightness Extension',
-        `Ambient Light Sensor is not available. Extension will not function`,
+        _('Adaptive Brightness Extension'),
+        _('Ambient Light Sensor is not available. Extension will not function'),
         { transient: false }
       );
     }
@@ -105,8 +111,10 @@ export default class AdaptiveBrightnessExtension extends Extension {
   handleGSDAmbientEnableChanged(val) {
     if (val) {
       this.notifications.showNotification(
-        'Adaptive Brightness Extension',
-        "GNOME's automatic brightness feature is enabled. Press to disable it in Settings → Power, allowing the extension to work properly.",
+        _('Adaptive Brightness Extension'),
+        _(
+          "GNOME's automatic brightness feature is enabled. Press to disable it in Settings → Power, allowing the extension to work properly."
+        ),
         {
           transient: true,
           onActivate: () => {
@@ -133,15 +141,15 @@ export default class AdaptiveBrightnessExtension extends Extension {
 
     // Show notification with resume on dismiss
     this.notifications.showNotification(
-      'Adaptive Brightness',
-      'Automatic brightness management is paused. Dismiss this notification to resume.',
+      _('Adaptive Brightness'),
+      _('Automatic brightness management is paused. Dismiss this notification to resume.'),
       {
         transient: false,
         onDestroy: () => {
           this.displayBrightness.paused = false;
         },
         action: {
-          label: 'Settings',
+          label: _('Settings'),
           callback: () => this.openPreferences(),
         },
       }
