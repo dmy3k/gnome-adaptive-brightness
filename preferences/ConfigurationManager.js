@@ -56,7 +56,7 @@ export class ConfigurationManager {
 
         try {
           const jsonStr = JSON.stringify(config);
-          GLib.file_set_contents(path, jsonStr);
+          GLib.file_set_contents(path, new TextEncoder().encode(jsonStr));
         } catch (e) {
           this._showErrorDialog(
             window,
@@ -185,6 +185,15 @@ export class ConfigurationManager {
           window,
           this._('Invalid Bucket Values'),
           this._('Bucket %d contains non-numeric values.').format(i + 1)
+        );
+        return false;
+      }
+
+      if (!Number.isInteger(min) || !Number.isInteger(max)) {
+        this._showErrorDialog(
+          window,
+          this._('Invalid Lux Values'),
+          this._('Bucket %d: min and max must be integers.').format(i + 1)
         );
         return false;
       }
@@ -318,9 +327,9 @@ export class ConfigurationManager {
       body: message,
     });
 
-    errorDialog.add_response(this._('OK'), this._('OK'));
-    errorDialog.set_default_response(this._('OK'));
-    errorDialog.set_close_response(this._('OK'));
+    errorDialog.add_response('ok', this._('OK'));
+    errorDialog.set_default_response('ok');
+    errorDialog.set_close_response('ok');
 
     errorDialog.show();
   }

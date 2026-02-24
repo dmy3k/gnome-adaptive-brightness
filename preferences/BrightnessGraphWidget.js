@@ -1,11 +1,19 @@
 import Gdk from 'gi://Gdk';
 import Gtk from 'gi://Gtk';
-import { BucketMapper } from '../lib/BucketMapper.js';
+
+const BUCKET_COLORS = [
+  [0.26, 0.5, 0.96],
+  [0.2, 0.73, 0.42],
+  [0.95, 0.61, 0.07],
+  [0.93, 0.31, 0.26],
+  [0.62, 0.31, 0.82],
+];
 
 export class BrightnessGraphWidget {
-  constructor(generateBucketNameCallback, saveBucketsCallback) {
+  constructor(generateBucketNameCallback, saveBucketsCallback, gettext = (x) => x) {
     this.generateBucketName = generateBucketNameCallback;
     this.saveBucketsToSettings = saveBucketsCallback;
+    this._ = gettext;
 
     this.bucketMapper = null;
     this.currentLux = null;
@@ -202,13 +210,7 @@ export class BrightnessGraphWidget {
 
     const bucketsData = this.bucketMapper?.buckets || [];
     if (bucketsData.length > 0) {
-      const colors = [
-        [0.26, 0.5, 0.96],
-        [0.2, 0.73, 0.42],
-        [0.95, 0.61, 0.07],
-        [0.93, 0.31, 0.26],
-        [0.62, 0.31, 0.82],
-      ];
+      const colors = BUCKET_COLORS;
 
       // Draw active bucket background highlight
       if (this.activeBucketIndex >= 0 && this.activeBucketIndex < bucketsData.length) {
@@ -387,13 +389,7 @@ export class BrightnessGraphWidget {
         const x = leftPadding + this._luxToX(this.currentLux, graphWidth);
         const y = topPadding + graphHeight - brightness * graphHeight;
 
-        const color = [
-          [0.26, 0.5, 0.96],
-          [0.2, 0.73, 0.42],
-          [0.95, 0.61, 0.07],
-          [0.93, 0.31, 0.26],
-          [0.62, 0.31, 0.82],
-        ][this.activeBucketIndex % 5];
+        const color = BUCKET_COLORS[this.activeBucketIndex % BUCKET_COLORS.length];
 
         cr.setSourceRGBA(color[0], color[1], color[2], 0.2);
         cr.arc(x, y, 11, 0, 2 * Math.PI);
@@ -589,7 +585,7 @@ export class BrightnessGraphWidget {
       this.dragState.originalValue = bucket.brightness;
     }
 
-    this._showTooltip(x, y);
+    this._renderTooltip(x, y);
     this.drawingArea.queue_draw();
   }
 
@@ -648,8 +644,8 @@ export class BrightnessGraphWidget {
       bucket.name = this.generateBucketName(bucket.min, bucket.max, bucket.brightness);
     }
 
-    this.bucketMapper = new BucketMapper(bucketsData);
-    this._updateTooltip(currentX, currentY);
+    this.bucketMapper.buckets = bucketsData;
+    this._renderTooltip(currentX, currentY);
     if (this.drawingArea) {
       this.drawingArea.queue_draw();
     }
@@ -672,7 +668,7 @@ export class BrightnessGraphWidget {
     this.drawingArea.queue_draw();
   }
 
-  _showTooltip(x, y) {
+  _renderTooltip(x, y) {
     const bucketsData = this.bucketMapper?.buckets || [];
     if (this.dragState.bucketIndex >= bucketsData.length) return;
 
@@ -680,38 +676,15 @@ export class BrightnessGraphWidget {
     let text = '';
 
     if (this.dragState.dragType === 'min') {
-      text = `Min: ${bucket.min} lux`;
+      text = this._('Min: %d lux').format(bucket.min);
     } else if (this.dragState.dragType === 'max') {
-      text = `Max: ${bucket.max} lux`;
+      text = this._('Max: %d lux').format(bucket.max);
     } else {
-      text = `Brightness: ${Math.round(bucket.brightness * 100)}%`;
+      text = this._('Brightness: %d%%').format(Math.round(bucket.brightness * 100));
     }
 
     this.tooltipLabel.set_label(text);
     this.tooltipBox.set_visible(true);
-
-    this.tooltipBox.set_margin_start(Math.round(x + 15));
-    this.tooltipBox.set_margin_top(Math.round(y - 25));
-  }
-
-  _updateTooltip(x, y) {
-    if (!this.tooltipBox.get_visible()) return;
-
-    const bucketsData = this.bucketMapper?.buckets || [];
-    if (this.dragState.bucketIndex >= bucketsData.length) return;
-
-    const bucket = bucketsData[this.dragState.bucketIndex];
-    let text = '';
-
-    if (this.dragState.dragType === 'min') {
-      text = `Min: ${bucket.min} lux`;
-    } else if (this.dragState.dragType === 'max') {
-      text = `Max: ${bucket.max} lux`;
-    } else {
-      text = `Brightness: ${Math.round(bucket.brightness * 100)}%`;
-    }
-
-    this.tooltipLabel.set_label(text);
     this.tooltipBox.set_margin_start(Math.round(x + 15));
     this.tooltipBox.set_margin_top(Math.round(y - 25));
   }
