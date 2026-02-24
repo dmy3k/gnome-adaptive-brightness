@@ -206,8 +206,9 @@ export default class AdaptiveBrightnessExtension extends Extension {
     }
 
     if (this.keyboardBacklight) {
-      this.keyboardBacklight.destroy();
-      this.keyboardBacklight = null;
+      this.keyboardBacklight.destroy().finally(() => {
+        this.keyboardBacklight = null;
+      });
     }
 
     if (this.notifications) {

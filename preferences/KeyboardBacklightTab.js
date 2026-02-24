@@ -1,5 +1,6 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 
 export class KeyboardBacklightTab {
@@ -74,6 +75,17 @@ export class KeyboardBacklightTab {
     }
 
     const availableLevels = this.kbdBrightnessProxy?.Steps;
+
+    if (!availableLevels) {
+      const placeholderRow = new Adw.ActionRow({
+        title: this._('Keyboard Backlight Unavailable'),
+        subtitle: this._('No compatible keyboard backlight hardware was detected.'),
+        sensitive: false,
+      });
+      this.keyboardGroup.add(placeholderRow);
+      this.keyboardDropdowns = [];
+      return;
+    }
 
     this.keyboardDropdowns = [];
     buckets.forEach((bucket, index) => {

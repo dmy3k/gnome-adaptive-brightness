@@ -20,7 +20,7 @@ function loadInterfaceXML(iface) {
     let [ok_, bytes] = f.load_contents(null);
     return new TextDecoder().decode(bytes);
   } catch (e) {
-    log(`Failed to load D-Bus interface ${iface}`);
+    console.warn(`Failed to load D-Bus interface ${iface}`);
   }
 
   return null;
@@ -55,6 +55,10 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     window.connect('close-request', () => {
       this._cleanupSensorProxy();
       this._cleanupKeyboardBacklight();
+      if (this._graphBucketsListenerId) {
+        settings.disconnect(this._graphBucketsListenerId);
+        this._graphBucketsListenerId = null;
+      }
       if (this._keyboardBucketsListenerId) {
         settings.disconnect(this._keyboardBucketsListenerId);
         this._keyboardBucketsListenerId = null;
@@ -74,7 +78,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     const buckets = this.bucketOps.loadBucketsFromSettings();
     this.bucketMapper = new BucketMapper(buckets);
 
-    settings.connect('changed::brightness-buckets', () => {
+    this._graphBucketsListenerId = settings.connect('changed::brightness-buckets', () => {
       if (this.graphWidget?.getSkipNextSettingsUpdate()) {
         this.graphWidget.clearSkipNextSettingsUpdate();
         return;
@@ -99,6 +103,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
       '/org/gnome/SettingsDaemon/Power',
       (proxy, error) => {
         if (!error) {
+          this.kbdBrightnessProxy = proxy;
           this.keyboardTab.setKeyboardBrightnessProxy(proxy);
         }
         this.keyboardTab.createPage(window, buckets);
@@ -125,7 +130,8 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
     this.graphWidget = new BrightnessGraphWidget(
       (min, max, brightness) => this.bucketOps.generateBucketName(min, max, brightness),
-      (buckets) => this.bucketOps.saveBucketsToSettings(buckets)
+      (buckets) => this.bucketOps.saveBucketsToSettings(buckets),
+      _
     );
     this.graphWidget.setBucketMapper(this.bucketMapper);
 
@@ -200,7 +206,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
         this._updateSensorDisplay();
       });
     } catch (error) {
-      log('Failed to initialize sensor proxy:', error);
+      console.error('Failed to initialize sensor proxy:', error);
     }
   }
 
@@ -235,6 +241,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
   _cleanupKeyboardBacklight() {
     this.kbdBrightnessProxy = null;
+    this.keyboardTab?.setKeyboardBrightnessProxy(null);
   }
 
   _resetBuckets() {
@@ -246,7 +253,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
   }
 
   _refreshBuckets() {
-    const buckets = this.bucketOps.loadBucketsFromSettings(this.settings);
+    const buckets = this.bucketOps.loadBucketsFromSettings();
     this.bucketMapper = new BucketMapper(buckets);
     this.graphWidget?.setBucketMapper(this.bucketMapper);
 
