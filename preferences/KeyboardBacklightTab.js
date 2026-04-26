@@ -64,6 +64,9 @@ export class KeyboardBacklightTab {
 
     if (this.keyboardDropdowns) {
       this.keyboardDropdowns.forEach((item) => {
+        if (item.handlerId) {
+          item.comboRow.disconnect(item.handlerId);
+        }
         this.keyboardGroup.remove(item.comboRow);
       });
     }
@@ -117,11 +120,11 @@ export class KeyboardBacklightTab {
       comboRow.set_model(model);
       comboRow.set_selected(currentLevel);
 
-      comboRow.connect('notify::selected', () => {
+      const handlerId = comboRow.connect('notify::selected', () => {
         this.saveKeyboardBacklightLevels();
       });
 
-      this.keyboardDropdowns.push({ comboRow, bucketIndex: index });
+      this.keyboardDropdowns.push({ comboRow, bucketIndex: index, handlerId });
       this.keyboardGroup.add(comboRow);
     });
   }
@@ -148,7 +151,24 @@ export class KeyboardBacklightTab {
   saveKeyboardBacklightLevels() {
     const levels = this.keyboardDropdowns.map((item) => item.comboRow.get_selected());
 
+    // Guard against GTK_INVALID_LIST_POSITION (0xFFFFFFFF) which can be emitted
+    // via notify::selected during widget disposal when the model is cleared.
+    if (levels.some((l) => l === 0xffffffff)) {
+      return;
+    }
+
     const variant = new GLib.Variant('au', levels);
     this.settings.set_value('keyboard-backlight-levels', variant);
+  }
+
+  destroy() {
+    if (this.keyboardDropdowns) {
+      this.keyboardDropdowns.forEach((item) => {
+        if (item.handlerId) {
+          item.comboRow.disconnect(item.handlerId);
+          item.handlerId = null;
+        }
+      });
+    }
   }
 }
