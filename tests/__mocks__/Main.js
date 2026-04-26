@@ -151,6 +151,29 @@ export class BrightnessManager {
 
 export const messageTray = new MessageTray();
 
+// Minimal layoutManager mock — only the 'monitors-changed' signal is used.
+class LayoutManager {
+  constructor() {
+    this._callbacks = new Map();
+    this._nextId = 1;
+  }
+  connect(signal, cb) {
+    if (signal !== 'monitors-changed') return 0;
+    const id = this._nextId++;
+    this._callbacks.set(id, cb);
+    return id;
+  }
+  disconnect(id) {
+    this._callbacks.delete(id);
+  }
+  emit(signal) {
+    if (signal !== 'monitors-changed') return;
+    for (const cb of this._callbacks.values()) cb();
+  }
+}
+
+export const layoutManager = new LayoutManager();
+
 // Export brightnessManager instance (can be set to null to test legacy path)
 export let brightnessManager = new BrightnessManager();
 
@@ -165,5 +188,6 @@ export function resetBrightnessManager(enabled = true) {
 
 export default {
   messageTray,
+  layoutManager,
   brightnessManager,
 };

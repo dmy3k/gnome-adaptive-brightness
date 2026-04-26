@@ -345,14 +345,36 @@ describe('BrightnessManager', () => {
       it('should trigger user preference callbacks on globalScale changes', () => {
         const callback = jest.fn();
         manager.onUserPreferenceChange.add(callback);
-        
+
         manager.connect();
         Main.brightnessManager.emit('changed');
-        
-        // Change globalScale value - this should trigger the callback
-        Main.brightnessManager.globalScale.value = 0.8;
-        
+
+        // Step past the post-monitor-change suppression window so the next
+        // value change is treated as a real user adjustment.
+        const realNow = Date.now();
+        const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(realNow + 2000);
+        try {
+          Main.brightnessManager.globalScale.value = 0.8;
+        } finally {
+          nowSpy.mockRestore();
+        }
+
         expect(callback).toHaveBeenCalledWith(0.8);
+      });
+
+      it('should suppress user preference callbacks during the monitor-change window', () => {
+        const callback = jest.fn();
+        manager.onUserPreferenceChange.add(callback);
+
+        manager.connect();
+        Main.brightnessManager.emit('changed');
+
+        // Within the suppression window after a monitor change, a value
+        // change is treated as system-driven (e.g., Mutter republish) and
+        // must not be reported as a manual user adjustment.
+        Main.brightnessManager.globalScale.value = 0.8;
+
+        expect(callback).not.toHaveBeenCalled();
       });
     });
 
