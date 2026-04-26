@@ -53,6 +53,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     this.currentLux = null;
 
     window.connect('close-request', () => {
+      this.keyboardTab?.destroy();
       this._cleanupSensorProxy();
       this._cleanupKeyboardBacklight();
       if (this._graphBucketsListenerId) {
