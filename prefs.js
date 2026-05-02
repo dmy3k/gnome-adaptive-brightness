@@ -27,12 +27,6 @@ function loadInterfaceXML(iface) {
 }
 
 export default class AdaptiveBrightnessPreferences extends ExtensionPreferences {
-  constructor(metadata) {
-    super(metadata);
-
-    this.initTranslations('adaptive-brightness@dmy3k.github.io');
-  }
-
   fillPreferencesWindow(window) {
     const settings = this.getSettings();
 

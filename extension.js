@@ -8,12 +8,6 @@ import { BucketMapper } from './lib/BucketMapper.js';
 import { KeyboardBacklightService } from './lib/KeyboardBacklightService.js';
 
 export default class AdaptiveBrightnessExtension extends Extension {
-  constructor(metadata) {
-    super(metadata);
-
-    this.initTranslations('adaptive-brightness@dmy3k.github.io');
-  }
-
   enable() {
     this.settings = this.getSettings();
 

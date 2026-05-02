@@ -36,11 +36,6 @@ export class Extension {
   disable() {
     // Override in subclass
   }
-
-  initTranslations(domain) {
-    // Mock translation initialization
-    // In real GNOME Shell, this sets up gettext for the extension
-  }
 }
 
 // Mock gettext function
