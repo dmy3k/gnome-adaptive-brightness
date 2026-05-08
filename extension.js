@@ -66,8 +66,30 @@ export default class AdaptiveBrightnessExtension extends Extension {
       'prepare-for-sleep',
       (lm, aboutToSuspend) => {
         // Pause processing brightness during transitions from/to suspend
-        // Force an update on resume to handle lighting changes during sleep
         this.displayBrightness.paused = aboutToSuspend;
+
+        // On resume: force an update after a short delay to handle lighting
+        // changes during sleep. The delay lets mutter republish globalScale
+        // (GNOME 49+) and lets GSD finish its post-resume brightness restore
+        // (GNOME 46-48) before we apply the lux-derived target. Direct write
+        // bypasses the displayIsActive gate, which can be stale (cached dim
+        // value or null globalScale) right after resume.
+        if (!aboutToSuspend) {
+          if (this._resumeTimeoutId) {
+            GLib.source_remove(this._resumeTimeoutId);
+          }
+          this._resumeTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+            this._resumeTimeoutId = null;
+            const lux = this.sensorProxy?.dbus.lightLevel;
+            if (lux !== null && lux !== undefined && this.bucketMapper) {
+              const bucket = this.bucketMapper.mapLuxToBrightness(lux);
+              if (bucket && this.displayBrightness?.backend) {
+                this.displayBrightness.backend.brightness = bucket.brightness;
+              }
+            }
+            return GLib.SOURCE_REMOVE;
+          });
+        }
       }
     );
 
@@ -183,6 +205,11 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.sleepResumeSignalId = null;
     }
     this.loginManager = null;
+
+    if (this._resumeTimeoutId) {
+      GLib.source_remove(this._resumeTimeoutId);
+      this._resumeTimeoutId = null;
+    }
 
     if (this.bucketSettingsChangedId) {
       this.settings?.disconnect(this.bucketSettingsChangedId);
