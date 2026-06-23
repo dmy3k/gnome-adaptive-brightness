@@ -640,6 +640,115 @@ describe('SensorProxyService', () => {
     });
   });
 
+  describe('lastLuxValue getter', () => {
+    beforeEach(async () => {
+      await service.start();
+      mockProxy = service.dbus._proxy;
+    });
+
+    it('should return null before any reading arrives', () => {
+      expect(service.lastLuxValue).toBeNull();
+    });
+
+    it('should return the last processed lux value', () => {
+      service._lastLuxValue = 50;
+      expect(service.lastLuxValue).toBe(50);
+    });
+
+    it('should NOT be updated when phantom lux=0 is deferred', () => {
+      // Simulate pre-sleep state: last known lux was 50
+      service._lastLuxValue = 50;
+      // Simulate daemon reconnect — throttle window is now active (settling mode)
+      service._enterSettlingMode();
+
+      // Phantom reading arrives while the sensor is still settling
+      const mockChanged = {
+        lookup_value: (key) => {
+          if (key === 'LightLevel') return { get_double: () => 0 };
+          return null;
+        },
+      };
+      service._onPropertiesChanged(mockProxy, mockChanged, {});
+
+      // lastLuxValue must NOT be updated until the throttle timer fires
+      expect(service.lastLuxValue).toBe(50);
+      // a pending throttle timer should be waiting
+      expect(service._pendingTimeout).not.toBeNull();
+    });
+
+    it('should be updated by readings once settling is complete', () => {
+      service._lastLuxValue = 50;
+      service._lastUpdateTime = 0; // simulate throttle window has expired
+
+      const mockChanged = {
+        lookup_value: (key) => {
+          if (key === 'LightLevel') return { get_double: () => 5 };
+          return null;
+        },
+      };
+      service._onPropertiesChanged(mockProxy, mockChanged, {});
+
+      expect(service.lastLuxValue).toBe(5);
+    });
+
+    it('should return null after daemon restart clears it', () => {
+      service._lastLuxValue = 50;
+      // Simulate _onNameOwnerChanged resetting lastLuxValue
+      service._lastLuxValue = null;
+
+      expect(service.lastLuxValue).toBeNull();
+    });
+  });
+
+  describe('phantom lux=0 regression: onDisplayIsActiveChanged path', () => {
+    // Regression test for the bug where phantom lux=0 (published by
+    // iio-sensor-proxy right after resume) would be written to the raw
+    // dbus.lightLevel proxy cache, and then if onDisplayIsActiveChanged
+    // fired after that cache update it would call
+    // adjustBrightnessForLightLevel(0), setting currentBucketIndex=0 and
+    // corrupting the bucket-mapper state so subsequent low-light readings
+    // would be trapped by crossesBucketBoundary and brightness would never
+    // recover from the minimum value.
+    //
+    // The fix: onDisplayIsActiveChanged uses sensorProxy.lastLuxValue
+    // (the filtered value) rather than sensorProxy.dbus.lightLevel (raw).
+
+    beforeEach(async () => {
+      await service.start();
+      mockProxy = service.dbus._proxy;
+    });
+
+    it('lastLuxValue is unaffected by phantom lux=0 until debounce fires, so onDisplayIsActiveChanged receives correct lux', () => {
+      // Pre-sleep state: last processed lux was 50
+      service._lastLuxValue = 50;
+
+      // Phantom lux=0 updates the proxy cache (happens before signal handler)
+      mockProxy.set_cached_property('LightLevel', 0);
+
+      // The raw proxy reports 0 — this is what triggered the bug
+      expect(service.dbus.lightLevel).toBe(0);
+
+      // But the deferred lastLuxValue is still the pre-sleep value
+      expect(service.lastLuxValue).toBe(50);
+
+      // Simulating what onDisplayIsActiveChanged now does (the fix):
+      // uses lastLuxValue instead of dbus.lightLevel
+      const luxForBrightnessUpdate = service.lastLuxValue;
+      expect(luxForBrightnessUpdate).toBe(50); // not 0 — bucket mapper is safe
+    });
+
+    it('lastLuxValue is null after daemon restart, so onDisplayIsActiveChanged defers to first real reading', () => {
+      // Daemon restart: _onNameOwnerChanged resets lastLuxValue to null
+      service._lastLuxValue = null;
+
+      // The onDisplayIsActiveChanged path uses lastLuxValue
+      const luxForBrightnessUpdate = service.lastLuxValue;
+      expect(luxForBrightnessUpdate).toBeNull();
+      // adjustBrightnessForLightLevel(null, true) -> early return -> no
+      // bucket-mapper corruption; brightness waits for first real ALS reading
+    });
+  });
+
   describe('callback API', () => {
     beforeEach(async () => {
       await service.start();
@@ -688,6 +797,102 @@ describe('SensorProxyService', () => {
       );
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('sensor settling debounce', () => {
+    const makeLuxChanged = (lux) => ({
+      lookup_value: (key) => {
+        if (key === 'LightLevel') return { get_double: () => lux };
+        return null;
+      },
+    });
+
+    beforeEach(async () => {
+      // Start with real timers so process.nextTick in dbus.connect/claimLight
+      // resolves, then switch to fake timers to control GLib.timeout_add.
+      await service.start();
+      mockProxy = service.dbus._proxy;
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      GLib.clearAllTimeouts();
+      jest.useRealTimers();
+    });
+
+    it('start() primes the throttle window so the first reading is deferred', () => {
+      // start() enters settling mode to guard against phantom readings that
+      // iio-sensor-proxy may emit right at startup. The first reading is
+      // deferred by the throttle window rather than applied immediately, but
+      // it is NOT dropped — it fires once the throttle timer expires.
+      expect(service._lastUpdateTime).toBeGreaterThan(0);
+
+      const callback = jest.fn();
+      service.onLightLevelChanged.add(callback);
+      service._onPropertiesChanged(mockProxy, makeLuxChanged(500), {});
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(service._pendingTimeout).not.toBeNull();
+    });
+
+    it('phantom reading replaced by stable reading: only stable value applied', () => {
+      const callback = jest.fn();
+      service.onLightLevelChanged.add(callback);
+
+      service._onPropertiesChanged(mockProxy, makeLuxChanged(0), {});
+      expect(service._pendingTimeout).not.toBeNull();
+
+      service._onPropertiesChanged(mockProxy, makeLuxChanged(300), {});
+      jest.advanceTimersByTime(service._throttleTimeoutMs + 1);
+
+      expect(callback).toHaveBeenCalledWith(300);
+      expect(callback).not.toHaveBeenCalledWith(0);
+    });
+
+    it('dark room: genuine 0 applied after throttle fires with no follow-up', () => {
+      const callback = jest.fn();
+      service.onLightLevelChanged.add(callback);
+
+      service._onPropertiesChanged(mockProxy, makeLuxChanged(0), {});
+      jest.advanceTimersByTime(service._throttleTimeoutMs + 1);
+
+      expect(callback).toHaveBeenCalledWith(0);
+      expect(service._lastLuxValue).toBe(0);
+    });
+
+    it('no signal during settling: fallback commits current proxy LightLevel', () => {
+      // Sensor value unchanged since connection — g-properties-changed never fires.
+      // The fallback timeout must pick up the current value from the proxy directly.
+      //
+      // Re-enter settling mode now that fake timers are active so that
+      // jest.advanceTimersByTime() can fire the fallback (the one scheduled by
+      // start() used real timers and is invisible to fake-timer advancement).
+      mockProxy.LightLevel = 400;
+      service._enterSettlingMode();
+
+      const callback = jest.fn();
+      service.onLightLevelChanged.add(callback);
+
+      jest.advanceTimersByTime(service._throttleTimeoutMs + 1);
+
+      expect(callback).toHaveBeenCalledWith(400);
+      expect(service.lastLuxValue).toBe(400);
+    });
+
+    it('daemon reconnect re-primes the throttle window', () => {
+      service._lastUpdateTime = 0; // expire the throttle window
+
+      service._currentNameOwner = 'old-owner';
+      service.dbus._proxy.g_name_owner = 'new-owner';
+      service._onNameOwnerChanged();
+
+      const callback = jest.fn();
+      service.onLightLevelChanged.add(callback);
+      service._onPropertiesChanged(mockProxy, makeLuxChanged(100), {});
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(service._pendingTimeout).not.toBeNull();
     });
   });
 });

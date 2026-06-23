@@ -72,7 +72,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
     );
 
     this.displayBrightness.onDisplayIsActiveChanged.add(() => {
-      this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
+      this.adjustBrightnessForLightLevel(this.sensorProxy.lastLuxValue, true);
     });
     this.displayBrightness.backend.onUserPreferenceChange.add(
       this.handleManualAdjustment.bind(this)
@@ -151,8 +151,11 @@ export default class AdaptiveBrightnessExtension extends Extension {
   }
 
   adjustBrightnessForLightLevel(luxValue, immediate = false) {
-    if (!this.displayBrightness.displayIsActive || luxValue === null) {
+    if (!this.displayBrightness.displayIsActive) {
       this.keyboardBacklight.handleDisplayInactive().catch((e) => console.error(e));
+      return;
+    }
+    if (luxValue === null) {
       return;
     }
 

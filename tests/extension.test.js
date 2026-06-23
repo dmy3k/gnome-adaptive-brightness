@@ -113,6 +113,7 @@ describe('AdaptiveBrightnessExtension', () => {
           callback(mockSensorProxy.dbus.lightLevel);
         }
       }),
+      lastLuxValue: 100,
       dbus: {
         lightLevel: 100,
         hasAmbientLight: true,
@@ -437,7 +438,7 @@ describe('AdaptiveBrightnessExtension', () => {
       // Test: Display becomes active - should update brightness immediately (not animated)
       mockDisplayBrightness.displayIsActive = true;
       mockDisplayBrightness.backend.brightness = 0.1;
-      mockSensorProxy.dbus.lightLevel = 100; // 0.25 target
+      mockSensorProxy.lastLuxValue = 100; // 0.25 target (filtered value, not raw dbus)
       displayActiveCallback();
       // When display becomes active, brightness is set immediately (immediate=true)
       expect(mockDisplayBrightness.backend.brightness).toBe(0.25);
@@ -509,7 +510,7 @@ describe('AdaptiveBrightnessExtension', () => {
       expect(mockDisplayBrightness.paused).toBe(true);
 
       // Test resuming - should unpause brightness processing
-      mockSensorProxy.dbus.lightLevel = 100; // 0.25 target
+      mockSensorProxy.lastLuxValue = 100; // 0.25 target (filtered value, not raw dbus)
       mockDisplayBrightness.backend.brightness = 0.5;
 
       extension.loginManager._emitPrepareForSleep(false);
