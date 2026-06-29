@@ -151,6 +151,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
   }
 
   adjustBrightnessForLightLevel(luxValue, immediate = false) {
+    if (!this.displayBrightness || !this.keyboardBacklight) return;
     if (!this.displayBrightness.displayIsActive) {
       this.keyboardBacklight.handleDisplayInactive().catch((e) => console.error(e));
       return;
@@ -203,9 +204,9 @@ export default class AdaptiveBrightnessExtension extends Extension {
     }
 
     if (this.keyboardBacklight) {
-      this.keyboardBacklight.destroy().finally(() => {
-        this.keyboardBacklight = null;
-      });
+      const kb = this.keyboardBacklight;
+      this.keyboardBacklight = null;
+      kb.destroy().catch((e) => console.error(e));
     }
 
     if (this.notifications) {
