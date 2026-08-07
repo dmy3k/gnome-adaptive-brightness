@@ -68,6 +68,11 @@ export default class AdaptiveBrightnessExtension extends Extension {
         // Pause processing brightness during transitions from/to suspend
         // Force an update on resume to handle lighting changes during sleep
         this.displayBrightness.paused = aboutToSuspend;
+        if (aboutToSuspend) {
+          this.sensorProxy.dbus.releaseLight();
+        } else {
+          this.sensorProxy.dbus.claimLight();
+        }
       }
     );
 
