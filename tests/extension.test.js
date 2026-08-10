@@ -510,6 +510,7 @@ describe('AdaptiveBrightnessExtension', () => {
       expect(mockDisplayBrightness.paused).toBe(false);
       extension.loginManager._emitPrepareForSleep(true);
       expect(mockDisplayBrightness.paused).toBe(true);
+      expect(mockSensorProxy.dbus.releaseLight).toBeCalled();
 
       // Test resuming - should unpause brightness processing
       mockSensorProxy.lastLuxValue = 100; // 0.25 target (filtered value, not raw dbus)
@@ -556,6 +557,7 @@ describe('AdaptiveBrightnessExtension', () => {
 
       // Should unpause but not adjust brightness when display is inactive
       expect(mockDisplayBrightness.paused).toBe(false);
+      expect(mockSensorProxy.dbus.claimLight).toBeCalled();
     });
 
     it('should disconnect login manager signal on disable', async () => {

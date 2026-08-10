@@ -6,7 +6,7 @@ GNOME Shell extension that automatically adjusts your screen brightness based on
 | :--------------------------------------: | :---------------------------------------: |
 | ![Screenshots](.github/img/settings.gif) | ![Screenshots](.github/img/settings3.png) |
 
-# Background
+## Background
 
 GNOME includes "Automatic Screen Brightness" feature, under Settings -> Power -> Power Saving.
 It has a number of issues reported that make it challenging to use in some scenarios:
@@ -15,21 +15,21 @@ It has a number of issues reported that make it challenging to use in some scena
 This extension addresses some of the above with custom implementation:
 
 - **Improved Algorithm**: More stable under often changing light conditions
-- **Smooth Transitions**: Gradually changes brightness to avoid jarring jumps
+- **Smooth Transitions**: Gradually changes brightness to avoid sudden jumps
 - **Customizable Brightness Curves**: Configure brightness response with an interactive graph-based UI
 - **Configuration Backup/Restore**: Export settings to JSON for backup, sharing, or manual editing to create custom brightness configurations - [example](examples/win11-brightness-config.json).
 
-# Installation
+## Installation
 
 ### From Gnome Extensions store
 
-This extension can be found in the [store](https://extensions.gnome.org/extension/8700/adaptive-brightness/).
+Recommended method. Extension can be found in the [store](https://extensions.gnome.org/extension/8700/adaptive-brightness/).
 
 [<img src=".github/img/store.png" height="100" alt="Get it on GNOME Extensions">](https://extensions.gnome.org/extension/8700/adaptive-brightness/)
 
 ### From source
 
-Typically this is needed for testing and development. Clone the repo, pack and install the extension.
+Typically used for testing and development. Clone the repo, pack and install the extension.
 
 ```bash
 git clone git@github.com:dmy3k/gnome-extension-adaptive-brightness.git
@@ -38,10 +38,15 @@ make install
 make enable
 ```
 
-# Supported devices
+## Supported devices
 
-ALS (ambient light sensor) is required for extension to operate. Some examples of laptops supporting it:
+ALS (ambient light sensor) is required for extension to operate.
 
+Keyboard backlight control availability may vary. Check `ls /sys/class/leds/` for keyboard backlight interfaces.
+
+<details>
+  <summary>Laptop models with ALS support (incomplete)</summary>
+  
 **HP:**
 
 - HP Elitebook 845 G9 (and newer)
@@ -90,9 +95,9 @@ ALS (ambient light sensor) is required for extension to operate. Some examples o
 - System76 Lemur Pro (lemp10 and newer)
 - System76 Oryx Pro (oryp8 and newer)
 
-**Note:** Keyboard backlight control availability may vary. Most laptops with ambient light sensors support automatic keyboard backlight adjustment, but this depends on proper driver support in the Linux kernel. Check `ls /sys/class/leds/` for keyboard backlight interfaces.
+</details>
 
-# Translation
+## Translations
 
 This extension supports internationalization (i18n) using gettext. All user-facing strings can be translated.
 
@@ -100,7 +105,7 @@ This extension supports internationalization (i18n) using gettext. All user-faci
 
 We welcome translations to new languages! For detailed instructions, see [po/README.md](po/README.md).
 
-# References
+## References
 
 - [Backlight](https://wiki.archlinux.org/title/Backlight)
 - [Keyboard backlight](https://wiki.archlinux.org/title/Keyboard_backlight)
