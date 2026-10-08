@@ -7,14 +7,44 @@ import { SensorProxyService } from './lib/SensorProxyService.js';
 import { BucketMapper } from './lib/BucketMapper.js';
 import { KeyboardBacklightService } from './lib/KeyboardBacklightService.js';
 
+// Backoff schedule (seconds) for retrying service startup after a transient
+// failure (e.g. iio-sensor-proxy or gnome-settings-daemon not yet up on the
+// bus at login/resume). The last value repeats for subsequent attempts.
+const START_RETRY_DELAYS_SEC = [2, 5, 10, 30, 60];
+
+// Safety net: if a manual-adjustment pause is never explicitly dismissed
+// (the pause notification is non-transient, so it can sit unnoticed in the
+// notification list), auto-resume after this long so the extension can't
+// stay silently inert indefinitely.
+const MANUAL_PAUSE_AUTO_RESUME_SEC = 15 * 60;
+
 export default class AdaptiveBrightnessExtension extends Extension {
   enable() {
     this.settings = this.getSettings();
+    this.notifications = new NotificationService(_);
 
+    // Set up sleep/resume handling using GNOME Shell's LoginManager
+    // When resuming from sleep, check light level immediately
+    // This handles scenarios where we wake up in different lighting conditions
+    // and might not receive ALS events (e.g., waking in darkness)
+    this.loginManager = LoginManager.getLoginManager();
+
+    this._enabled = true;
+    this._startAttempt = 0;
+    this._startRetryTimeout = null;
+
+    this._startServices();
+  }
+
+  /**
+   * (Re)create the service instances and attempt to start them.
+   * On failure (e.g. a required D-Bus service isn't up yet), tears down
+   * whatever partially started and retries with backoff instead of leaving
+   * the extension permanently inert until the user manually toggles it.
+   */
+  _startServices() {
     const buckets = this._loadBucketsFromSettings();
     this.bucketMapper = new BucketMapper(buckets);
-
-    this.notifications = new NotificationService(_);
     this.displayBrightness = new DisplayBrightnessService();
     this.keyboardBacklight = new KeyboardBacklightService(this.settings);
 
@@ -23,25 +53,50 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.bucketMapper.crossesBucketBoundary.bind(this.bucketMapper)
     );
 
-    // Set up sleep/resume handling using GNOME Shell's LoginManager
-    // When resuming from sleep, check light level immediately
-    // This handles scenarios where we wake up in different lighting conditions
-    // and might not receive ALS events (e.g., waking in darkness)
-    this.loginManager = LoginManager.getLoginManager();
-
     Promise.allSettled([
       this.displayBrightness.start(),
       this.keyboardBacklight.start(),
       this.sensorProxy.start(),
     ]).then((results) => {
+      // Extension may have been disabled while these promises were pending
+      if (!this._enabled) return;
+
       if (results.some((r) => r.status === 'rejected')) {
-        console.log('Some required services failed to start', results);
+        console.error('Some required services failed to start, will retry:', results);
+
+        this.sensorProxy?.destroy();
+        this.displayBrightness?.destroy();
+        this.keyboardBacklight?.destroy().catch((e) => console.error(e));
+
+        this._scheduleStartRetry();
         return;
       }
+
+      this._startAttempt = 0;
       this.setupHandlers();
 
       // Set initial brightness based on current light level
       this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
+    });
+  }
+
+  _scheduleStartRetry() {
+    const delaySec =
+      START_RETRY_DELAYS_SEC[Math.min(this._startAttempt, START_RETRY_DELAYS_SEC.length - 1)];
+    this._startAttempt++;
+
+    if (this._startAttempt === 3) {
+      this.notifications.showNotification(
+        _('Adaptive Brightness Extension'),
+        _('Required system services are not responding. Will keep retrying in the background.'),
+        { transient: true }
+      );
+    }
+
+    this._startRetryTimeout = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, delaySec, () => {
+      this._startRetryTimeout = null;
+      if (this._enabled) this._startServices();
+      return GLib.SOURCE_REMOVE;
     });
   }
 
@@ -138,6 +193,19 @@ export default class AdaptiveBrightnessExtension extends Extension {
     // Pause automatic brightness management
     this.displayBrightness.paused = true;
 
+    if (this._manualPauseTimeout) {
+      GLib.source_remove(this._manualPauseTimeout);
+    }
+    this._manualPauseTimeout = GLib.timeout_add_seconds(
+      GLib.PRIORITY_LOW,
+      MANUAL_PAUSE_AUTO_RESUME_SEC,
+      () => {
+        this._manualPauseTimeout = null;
+        if (this.displayBrightness) this.displayBrightness.paused = false;
+        return GLib.SOURCE_REMOVE;
+      }
+    );
+
     // Show notification with resume on dismiss
     this.notifications.showNotification(
       _('Adaptive Brightness'),
@@ -145,7 +213,11 @@ export default class AdaptiveBrightnessExtension extends Extension {
       {
         transient: false,
         onDestroy: () => {
-          this.displayBrightness.paused = false;
+          if (this._manualPauseTimeout) {
+            GLib.source_remove(this._manualPauseTimeout);
+            this._manualPauseTimeout = null;
+          }
+          if (this.displayBrightness) this.displayBrightness.paused = false;
         },
         action: {
           label: _('Settings'),
@@ -183,6 +255,19 @@ export default class AdaptiveBrightnessExtension extends Extension {
   }
 
   disable() {
+    this._enabled = false;
+    this._startAttempt = 0;
+
+    if (this._startRetryTimeout) {
+      GLib.source_remove(this._startRetryTimeout);
+      this._startRetryTimeout = null;
+    }
+
+    if (this._manualPauseTimeout) {
+      GLib.source_remove(this._manualPauseTimeout);
+      this._manualPauseTimeout = null;
+    }
+
     // "unlock-dialog" session mode is used to be able to listen for 'prepare-for-sleep' signal from LoginManager
     // in order to check light level immediately after resuming from suspend (with lock screen being shown).
     // This handles scenarios where resuming in dark environment does not trigger ALS event
