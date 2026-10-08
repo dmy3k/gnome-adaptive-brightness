@@ -4,7 +4,7 @@
   "name": "Adaptive Brightness",
   "session-modes": ["unlock-dialog", "user"],
   "settings-schema": "org.gnome.shell.extensions.adaptive-brightness",
-  "shell-version": ["46", "47", "48", "49", "50"],
+  "shell-version": ["46", "47", "48", "49", "50", "51"],
   "url": "https://github.com/dmy3k/gnome-adaptive-brightness",
   "uuid": "adaptive-brightness@dmy3k.github.io",
   "donations": {
