@@ -1,3 +1,4 @@
+export const PRIORITY_DEFAULT = 0;
 export const PRIORITY_LOW = 200;
 export const SOURCE_REMOVE = false;
 export const SOURCE_CONTINUE = true;
@@ -49,16 +50,14 @@ export class Variant {
   }
 
   get_int32() {
-    return typeof this._value === "number"
-      ? this._value
-      : parseInt(this._value);
+    return typeof this._value === 'number' ? this._value : parseInt(this._value);
   }
 
   lookup_value(key, type) {
-    if (this._format === "a{sv}" || typeof this._value === "object") {
+    if (this._format === 'a{sv}' || typeof this._value === 'object') {
       if (this._value && key in this._value) {
         const value = this._value[key];
-        return new Variant("i", value);
+        return new Variant('i', value);
       }
     }
     return null;
@@ -66,6 +65,7 @@ export class Variant {
 }
 
 export default {
+  PRIORITY_DEFAULT,
   PRIORITY_LOW,
   SOURCE_REMOVE,
   SOURCE_CONTINUE,

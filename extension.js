@@ -6,6 +6,7 @@ import { DisplayBrightnessService } from './lib/DisplayBrightnessService.js';
 import { SensorProxyService } from './lib/SensorProxyService.js';
 import { BucketMapper } from './lib/BucketMapper.js';
 import { KeyboardBacklightService } from './lib/KeyboardBacklightService.js';
+import { VideoPlaybackMonitor } from './lib/VideoPlaybackMonitor.js';
 
 export default class AdaptiveBrightnessExtension extends Extension {
   enable() {
@@ -17,6 +18,8 @@ export default class AdaptiveBrightnessExtension extends Extension {
     this.notifications = new NotificationService(_);
     this.displayBrightness = new DisplayBrightnessService();
     this.keyboardBacklight = new KeyboardBacklightService(this.settings);
+    this.videoMonitor = new VideoPlaybackMonitor(this.settings);
+    this.videoOverrideBrightness = null;
 
     // Pass bucket boundary filter to sensor service for efficient event filtering
     this.sensorProxy = new SensorProxyService(
@@ -33,6 +36,7 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.displayBrightness.start(),
       this.keyboardBacklight.start(),
       this.sensorProxy.start(),
+      this.videoMonitor.start(),
     ]).then((results) => {
       if (results.some((r) => r.status === 'rejected')) {
         console.log('Some required services failed to start', results);
@@ -93,8 +97,35 @@ export default class AdaptiveBrightnessExtension extends Extension {
     this.bucketSettingsChangedId = this.settings.connect('changed::brightness-buckets', () => {
       const buckets = this._loadBucketsFromSettings();
       this.bucketMapper = new BucketMapper(buckets);
+      this.videoOverrideBrightness = this._getVideoOverrideBrightness();
       this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel, true);
     });
+
+    // Video monitor may already have evaluated before this handler was registered
+    this.videoOverrideBrightness = this._getVideoOverrideBrightness();
+    this.videoMonitor.onActiveChanged.add(() => this.updateVideoOverride());
+    this.videoBucketSettingChangedId = this.settings.connect(
+      'changed::fullscreen-brightness-bucket',
+      () => this.updateVideoOverride()
+    );
+  }
+
+  // Returns the brightness to force while fullscreen video plays, or null for automatic control.
+  _getVideoOverrideBrightness() {
+    if (!this.videoMonitor?.active) {
+      return null;
+    }
+    const index = this.settings.get_int('fullscreen-brightness-bucket');
+    return this.bucketMapper.buckets[index]?.brightness ?? null;
+  }
+
+  updateVideoOverride() {
+    const target = this._getVideoOverrideBrightness();
+    if (target === this.videoOverrideBrightness) {
+      return;
+    }
+    this.videoOverrideBrightness = target;
+    this.adjustBrightnessForLightLevel(this.sensorProxy.dbus.lightLevel);
   }
 
   handleSensorAvailableChanged(val) {
@@ -161,6 +192,12 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.keyboardBacklight.handleDisplayInactive().catch((e) => console.error(e));
       return;
     }
+
+    if (this.videoOverrideBrightness !== null) {
+      this._applyBrightness(this.videoOverrideBrightness, immediate);
+      return;
+    }
+
     if (luxValue === null) {
       return;
     }
@@ -168,17 +205,19 @@ export default class AdaptiveBrightnessExtension extends Extension {
     const targetBucket = this.bucketMapper.mapLuxToBrightness(luxValue);
 
     if (targetBucket) {
-      const targetBrightness = targetBucket.brightness;
-
-      if (immediate) {
-        this.displayBrightness.backend.brightness = targetBrightness;
-      } else {
-        this.displayBrightness.animateBrightness(targetBrightness).catch((e) => console.error(e));
-      }
+      this._applyBrightness(targetBucket.brightness, immediate);
 
       this.keyboardBacklight
         .updateForBrightnessBucket(this.bucketMapper.currentBucketIndex)
         .catch((e) => console.error(e));
+    }
+  }
+
+  _applyBrightness(targetBrightness, immediate) {
+    if (immediate) {
+      this.displayBrightness.backend.brightness = targetBrightness;
+    } else {
+      this.displayBrightness.animateBrightness(targetBrightness).catch((e) => console.error(e));
     }
   }
 
@@ -197,6 +236,17 @@ export default class AdaptiveBrightnessExtension extends Extension {
       this.settings?.disconnect(this.bucketSettingsChangedId);
       this.bucketSettingsChangedId = null;
     }
+
+    if (this.videoBucketSettingChangedId) {
+      this.settings?.disconnect(this.videoBucketSettingChangedId);
+      this.videoBucketSettingChangedId = null;
+    }
+
+    if (this.videoMonitor) {
+      this.videoMonitor.destroy();
+      this.videoMonitor = null;
+    }
+    this.videoOverrideBrightness = null;
 
     if (this.sensorProxy) {
       this.sensorProxy.destroy();

@@ -10,6 +10,7 @@ import { BucketMapper } from './lib/BucketMapper.js';
 import { BrightnessGraphWidget } from './preferences/BrightnessGraphWidget.js';
 import { ConfigurationManager } from './preferences/ConfigurationManager.js';
 import { KeyboardBacklightTab } from './preferences/KeyboardBacklightTab.js';
+import { FullscreenVideoGroup } from './preferences/FullscreenVideoGroup.js';
 import { BucketOperations } from './preferences/BucketOperations.js';
 
 function loadInterfaceXML(iface) {
@@ -48,6 +49,7 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
     window.connect('close-request', () => {
       this.keyboardTab?.destroy();
+      this.fullscreenGroup?.destroy();
       this._cleanupSensorProxy();
       this._cleanupKeyboardBacklight();
       if (this._graphBucketsListenerId) {
@@ -58,11 +60,16 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
         settings.disconnect(this._keyboardBucketsListenerId);
         this._keyboardBucketsListenerId = null;
       }
+      if (this._fullscreenBucketsListenerId) {
+        settings.disconnect(this._fullscreenBucketsListenerId);
+        this._fullscreenBucketsListenerId = null;
+      }
       // Clean up all properties
       this.settings = null;
       this.bucketOps = null;
       this.configManager = null;
       this.keyboardTab = null;
+      this.fullscreenGroup = null;
       this.graphWidget = null;
       this.bucketMapper = null;
       this.activeBucketIndex = -1;
@@ -132,12 +139,22 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
 
     graphGroup.add(this.graphWidget.getWidget());
 
+    this.fullscreenGroup = new FullscreenVideoGroup(
+      settings,
+      (min, max, brightness) => this.bucketOps.generateBucketName(min, max, brightness),
+      _
+    );
+    page.add(this.fullscreenGroup.createGroup());
+    this._fullscreenBucketsListenerId = settings.connect('changed::brightness-buckets', () => {
+      this.fullscreenGroup?.rebuild();
+    });
+
     const configGroup = new Adw.PreferencesGroup({});
     page.add(configGroup);
 
     const configRow = new Adw.ActionRow({
       title: _('Configuration'),
-      subtitle: _('Import or export brightness settings'),
+      subtitle: _('Import, export or reset brightness settings'),
     });
 
     const buttonBox = new Gtk.Box({
@@ -166,23 +183,36 @@ export default class AdaptiveBrightnessPreferences extends ExtensionPreferences 
     });
     buttonBox.append(importButton);
 
-    configRow.add_suffix(buttonBox);
-    configGroup.add(configRow);
-
-    const resetRow = new Adw.ActionRow({
-      title: _('Reset to Defaults'),
-      subtitle: _('Restore the default brightness configuration'),
-      activatable: true,
-    });
-    const resetIcon = new Gtk.Image({
-      icon_name: 'view-refresh-symbolic',
+    const resetButton = new Gtk.Button({
+      icon_name: 'edit-undo-symbolic',
+      tooltip_text: _('Restore the default brightness configuration'),
       valign: Gtk.Align.CENTER,
     });
-    resetRow.add_suffix(resetIcon);
-    resetRow.connect('activated', () => {
-      this._resetBuckets();
+    resetButton.connect('clicked', () => this._confirmReset(window));
+    buttonBox.append(resetButton);
+
+    configRow.add_suffix(buttonBox);
+    configGroup.add(configRow);
+  }
+
+  _confirmReset(window) {
+    const dialog = new Adw.AlertDialog({
+      heading: _('Reset to Defaults'),
+      body: _(
+        'Brightness buckets and keyboard backlight levels will be replaced with the defaults.'
+      ),
     });
-    configGroup.add(resetRow);
+    dialog.add_response('cancel', _('Cancel'));
+    dialog.add_response('reset', _('Reset'));
+    dialog.set_response_appearance('reset', Adw.ResponseAppearance.DESTRUCTIVE);
+    dialog.set_default_response('cancel');
+    dialog.set_close_response('cancel');
+    dialog.connect('response', (_dialog, response) => {
+      if (response === 'reset') {
+        this._resetBuckets();
+      }
+    });
+    dialog.present(window);
   }
 
   async _initSensorProxy() {

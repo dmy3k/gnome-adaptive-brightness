@@ -22,6 +22,13 @@ export function loadInterfaceXML(iface) {
     <property name="Steps" type="i" access="read"/>
   </interface>
 </node>`,
+    'org.gnome.SessionManager.Inhibitor': `
+<node>
+  <interface name="org.gnome.SessionManager.Inhibitor">
+    <method name="GetAppId"><arg type="s" direction="out"/></method>
+    <method name="GetFlags"><arg type="u" direction="out"/></method>
+  </interface>
+</node>`,
   };
 
   if (interfaces[iface]) {

@@ -40,6 +40,10 @@ class DBusProxy {
 
     // Return a constructor function that creates proxy instances
     return class ProxyWrapper extends DBusProxy {
+      static async newAsync(bus, busName, objectPath) {
+        return new ProxyWrapper(bus, busName, objectPath);
+      }
+
       constructor(bus, busName, objectPath, callback) {
         super();
         this._busName = busName;
@@ -63,17 +67,20 @@ class DBusProxy {
         // Add async method wrappers for each method in the interface
         methods.forEach((methodName) => {
           const asyncMethodName = `${methodName}Async`;
-          this[asyncMethodName] = (callback) => {
-            // Call the callback asynchronously with test-defined return value
-            // Real GJS signature: callback(result, error)
-            process.nextTick(() => {
-              const returnValue = this._mockMethodReturnValue?.[methodName] ?? null;
-              const error = this._mockMethodError?.[methodName] ?? null;
-              if (callback) {
-                callback(returnValue, error);
-              }
+          this[asyncMethodName] = (callback) =>
+            // Real GJS returns a promise, and also reports to an optional callback(result, error)
+            new Promise((resolve, reject) => {
+              process.nextTick(() => {
+                const returnValue = this._mockMethodReturnValue?.[methodName] ?? null;
+                const error = this._mockMethodError?.[methodName] ?? null;
+                callback?.(returnValue, error);
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve(returnValue);
+                }
+              });
             });
-          };
         });
 
         // Add signal support for makeProxyWrapper signals

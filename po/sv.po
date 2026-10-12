@@ -64,8 +64,8 @@ msgid "Configuration"
 msgstr "Konfiguration"
 
 #: prefs.js
-msgid "Import or export brightness settings"
-msgstr "Importera eller exportera ljusstyrkeinställningar"
+msgid "Import, export or reset brightness settings"
+msgstr "Importera, exportera eller återställ ljusstyrkeinställningar"
 
 #: prefs.js
 msgid "Export configuration"
@@ -82,6 +82,14 @@ msgstr "Återställ"
 #: prefs.js
 msgid "Restore the default brightness configuration"
 msgstr "Återställ standardinställningar för ljusstyrka"
+
+#: prefs.js
+msgid "Brightness buckets and keyboard backlight levels will be replaced with the defaults."
+msgstr "Ljusstyrkenivåer och tangentbordsbelysningens nivåer ersätts med standardvärdena."
+
+#: prefs.js
+msgid "Reset"
+msgstr "Återställ"
 
 #: preferences/KeyboardBacklightTab.js
 msgid "Keyboard"

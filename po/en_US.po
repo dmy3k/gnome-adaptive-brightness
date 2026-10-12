@@ -65,8 +65,8 @@ msgid "Configuration"
 msgstr "Configuration"
 
 #: prefs.js
-msgid "Import or export brightness settings"
-msgstr "Import or export brightness settings"
+msgid "Import, export or reset brightness settings"
+msgstr "Import, export or reset brightness settings"
 
 #: prefs.js
 msgid "Export configuration"
@@ -83,6 +83,14 @@ msgstr "Reset to Defaults"
 #: prefs.js
 msgid "Restore the default brightness configuration"
 msgstr "Restore the default brightness configuration"
+
+#: prefs.js
+msgid "Brightness buckets and keyboard backlight levels will be replaced with the defaults."
+msgstr "Brightness buckets and keyboard backlight levels will be replaced with the defaults."
+
+#: prefs.js
+msgid "Reset"
+msgstr "Reset"
 
 #: preferences/KeyboardBacklightTab.js
 msgid "Keyboard"
