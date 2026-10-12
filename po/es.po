@@ -65,8 +65,8 @@ msgid "Configuration"
 msgstr "Configuración"
 
 #: prefs.js
-msgid "Import or export brightness settings"
-msgstr "Importar o exportar configuración de brillo"
+msgid "Import, export or reset brightness settings"
+msgstr "Importar, exportar o restablecer la configuración de brillo"
 
 #: prefs.js
 msgid "Export configuration"
@@ -83,6 +83,14 @@ msgstr "Restaurar valores predeterminados"
 #: prefs.js
 msgid "Restore the default brightness configuration"
 msgstr "Restaurar la configuración de brillo predeterminada"
+
+#: prefs.js
+msgid "Brightness buckets and keyboard backlight levels will be replaced with the defaults."
+msgstr "Los niveles de brillo y de retroiluminación del teclado se sustituirán por los valores predeterminados."
+
+#: prefs.js
+msgid "Reset"
+msgstr "Restablecer"
 
 #: preferences/KeyboardBacklightTab.js
 msgid "Keyboard"

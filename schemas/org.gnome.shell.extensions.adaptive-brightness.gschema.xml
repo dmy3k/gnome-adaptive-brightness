@@ -32,5 +32,23 @@
         is detected in low light conditions.
       </description>
     </key>
+    <key name="fullscreen-brightness-bucket" type="i">
+      <default>-1</default>
+      <summary>Brightness bucket used during fullscreen video</summary>
+      <description>
+        Index of the brightness bucket whose brightness is applied while a fullscreen video is playing
+        on the primary monitor. Ambient light adjustments are suspended during that time.
+        -1 disables the feature. Out-of-range values are treated as disabled.
+      </description>
+    </key>
+    <key name="fullscreen-require-inhibitor" type="b">
+      <default>true</default>
+      <summary>Require an idle inhibitor to detect video playback</summary>
+      <description>
+        When enabled, fullscreen is only treated as video playback if an application also holds
+        a session idle inhibitor, which media players and browsers do while a video is playing.
+        When disabled, any fullscreen window on the primary monitor counts.
+      </description>
+    </key>
   </schema>
 </schemalist>

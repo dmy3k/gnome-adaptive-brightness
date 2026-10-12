@@ -4,7 +4,7 @@ GNOME Shell extension that automatically adjusts your screen brightness based on
 
 |                                          |                                           |
 | :--------------------------------------: | :---------------------------------------: |
-| ![Screenshots](.github/img/settings.gif) | ![Screenshots](.github/img/settings3.png) |
+| ![Screenshots](.github/img/settings.png) | ![Screenshots](.github/img/settings3.png) |
 
 ## Background
 
@@ -16,6 +16,7 @@ This extension addresses some of the above with custom implementation:
 
 - **Improved Algorithm**: More stable under often changing light conditions
 - **Smooth Transitions**: Gradually changes brightness to avoid sudden jumps
+- **Fullscreen Video Brightness**: Optionally apply a chosen brightness level while a video plays fullscreen on the primary monitor (detected as a fullscreen window plus an app holding a session idle inhibitor), then resume automatic control afterwards
 - **Customizable Brightness Curves**: Configure brightness response with an interactive graph-based UI
 - **Configuration Backup/Restore**: Export settings to JSON for backup, sharing, or manual editing to create custom brightness configurations - [example](examples/win11-brightness-config.json).
 
@@ -97,13 +98,9 @@ Keyboard backlight control availability may vary. Check `ls /sys/class/leds/` fo
 
 </details>
 
-## Translations
+## Contributing
 
-This extension supports internationalization (i18n) using gettext. All user-facing strings can be translated.
-
-### Contributing Translations
-
-We welcome translations to new languages! For detailed instructions, see [po/README.md](po/README.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## References
 

@@ -6,6 +6,11 @@ const mockNotificationService = jest.fn();
 const mockDisplayBrightnessService = jest.fn();
 const mockSensorProxyService = jest.fn();
 const mockBucketMapper = jest.fn();
+const mockVideoPlaybackMonitor = jest.fn();
+
+jest.unstable_mockModule('../lib/VideoPlaybackMonitor.js', () => ({
+  VideoPlaybackMonitor: mockVideoPlaybackMonitor,
+}));
 
 jest.unstable_mockModule('../lib/NotificationService.js', () => ({
   NotificationService: mockNotificationService,
@@ -37,6 +42,8 @@ describe('AdaptiveBrightnessExtension', () => {
   let mockSensorProxy;
   let mockPowerSettings;
   let mockNotifications;
+  let mockVideoMonitor;
+  let videoBucketIndex;
   let LoginManager;
 
   beforeEach(async () => {
@@ -49,6 +56,15 @@ describe('AdaptiveBrightnessExtension', () => {
     mockDisplayBrightnessService.mockClear();
     mockSensorProxyService.mockClear();
     mockBucketMapper.mockClear();
+    mockVideoPlaybackMonitor.mockClear();
+
+    videoBucketIndex = 4;
+    mockVideoMonitor = {
+      active: false,
+      start: jest.fn().mockResolvedValue(undefined),
+      destroy: jest.fn(),
+      onActiveChanged: { add: jest.fn(), remove: jest.fn() },
+    };
 
     // Mock the services
     mockDisplayBrightness = {
@@ -194,6 +210,7 @@ describe('AdaptiveBrightnessExtension', () => {
     mockDisplayBrightnessService.mockImplementation(() => mockDisplayBrightness);
     mockSensorProxyService.mockImplementation((filterFn) => mockSensorProxy);
     mockBucketMapper.mockImplementation(() => mockBucketMapperInstance);
+    mockVideoPlaybackMonitor.mockImplementation(() => mockVideoMonitor);
 
     // Create extension instance
     extension = new AdaptiveBrightnessExtension({
@@ -234,6 +251,7 @@ describe('AdaptiveBrightnessExtension', () => {
       }),
       connect: jest.fn().mockReturnValue(1),
       disconnect: jest.fn(),
+      get_int: jest.fn(() => videoBucketIndex),
     });
 
     // Reset LoginManager singleton for each test
@@ -418,6 +436,100 @@ describe('AdaptiveBrightnessExtension', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith(expect.any(Error));
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('Fullscreen Video Override', () => {
+    beforeEach(async () => {
+      mockDisplayBrightness.displayIsActive = true;
+      mockSensorProxy.dbus.lightLevel = 100; // ambient maps to 0.25
+      await enableAndWait(extension);
+      mockDisplayBrightness.animateBrightness.mockClear();
+    });
+
+    it('starts the monitor and destroys it on disable', () => {
+      expect(mockVideoMonitor.start).toHaveBeenCalled();
+      expect(mockVideoMonitor.onActiveChanged.add).toHaveBeenCalled();
+
+      extension.disable();
+
+      expect(mockVideoMonitor.destroy).toHaveBeenCalled();
+    });
+
+    it('applies the selected bucket brightness when video starts', () => {
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(1.0);
+    });
+
+    it('ignores ambient light changes while video is playing', () => {
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      extension.adjustBrightnessForLightLevel(10);
+
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledTimes(1);
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(1.0);
+    });
+
+    it('does not touch the keyboard backlight while overridden', () => {
+      const kb = extension.keyboardBacklight;
+      const spy = jest.spyOn(kb, 'updateForBrightnessBucket').mockResolvedValue();
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+
+      extension.adjustBrightnessForLightLevel(10);
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('restores the ambient brightness when video ends', () => {
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      mockVideoMonitor.active = false;
+      extension.updateVideoOverride();
+
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(0.25);
+    });
+
+    it('does nothing when the feature is disabled (-1)', () => {
+      videoBucketIndex = -1;
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+
+      expect(extension.videoOverrideBrightness).toBeNull();
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
+    });
+
+    it('treats an out-of-range bucket index as disabled', () => {
+      videoBucketIndex = 9;
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+
+      expect(extension.videoOverrideBrightness).toBeNull();
+    });
+
+    it('restores ambient brightness when the setting is disabled mid-playback', () => {
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+      mockDisplayBrightness.animateBrightness.mockClear();
+
+      videoBucketIndex = -1;
+      extension.updateVideoOverride();
+
+      expect(mockDisplayBrightness.animateBrightness).toHaveBeenCalledWith(0.25);
+    });
+
+    it('does not override while the display is inactive', () => {
+      mockDisplayBrightness.displayIsActive = false;
+      mockVideoMonitor.active = true;
+      extension.updateVideoOverride();
+
+      expect(mockDisplayBrightness.animateBrightness).not.toHaveBeenCalled();
     });
   });
 
